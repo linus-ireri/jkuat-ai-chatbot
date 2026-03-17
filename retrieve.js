@@ -24,7 +24,7 @@ async function main() {
   console.log(" Vector store loaded successfully.");
 
   // 3. Define a user query (you can replace or pass dynamically)
-  const query = "What products and services does Car and General Kenya Ltd offer?";
+  const query = "What courses are offered at JKUAT?";
 
   console.log(`\n Searching top 5 most relevant chunks for:\n"${query}"\n`);
 

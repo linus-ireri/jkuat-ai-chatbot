@@ -15,7 +15,7 @@ async function main() {
   const vectorStore = await HNSWLib.load("vector_store", embeddings);
 
   // 🔍 Example question (replace or pass dynamically)
-  const question = "What products and services does Car and General Kenya Ltd offer?";
+  const question = "What courses are offered at JKUAT?";
 
   console.log("\n🔎 Retrieving relevant context...");
   const results = await vectorStore.similaritySearch(question, 5);
@@ -31,17 +31,17 @@ async function main() {
 
   // 🧠 Strict, structured prompt to prevent hallucination
   const prompt = `
-You are the official Car&Gen.AI assistant for Car and General Kenya Ltd. Your job is to answer the user's question *strictly and only* based on the provided context about Car and General.
+You are the official JKUAT.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your job is to answer the user's question *strictly and only* based on the provided context about JKUAT.
 
 If the answer cannot be found exactly in the context, respond with:
-"I don't have that information in my knowledge base. Please contact Car & General's official channels for assistance."
+"I don't have that information in my knowledge base. Please contact JKUAT's official channels for assistance."
 
 Follow these rules:
 - Do NOT invent or assume information.
-- Quote exact information about products, services, branches, warranties when available.
+- Quote exact information about courses, academic programs, campus directions, learning hours, admissions when available.
 - Never mix information from outside the retrieved context.
 - Maintain a professional, helpful, and factual tone.
-- Always reference Car & General Kenya Ltd when answering.
+- Always reference JKUAT when answering.
 
 -----------------------
 Retrieved Context:
@@ -66,7 +66,7 @@ Answer:
       {
         model: "arcee-ai/trinity-large-preview:free",
         messages: [
-          { role: "system", content: "You are Car&Gen.AI, the official assistant for Car and General Kenya Ltd. Answer questions accurately based only on provided context about Car and General's products, services, and operations." },
+          { role: "system", content: "You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Answer questions accurately based only on provided context about JKUAT's courses, academic programs, campus information, and university operations." },
           { role: "user", content: prompt }
         ],
         temperature: 0.1, // 🔒 ensures factuality with minimal variation

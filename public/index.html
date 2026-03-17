@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Car&Gen.AI - Official Car and General Assistant</title>
+  <meta name="description" content="Official assistant for Car and General Kenya Ltd — products, services, branches, contacts, warranties, and spare parts.">
+  <link rel="canonical" href="https://car-and-general-ai.netlify.app/">
+
+  <meta property="og:title" content="Car&Gen.AI - Official Car and General Assistant">
+  <meta property="og:description" content="Official assistant for Car and General Kenya Ltd — products, services, branches, contacts, warranties, and spare parts.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://car-and-general-ai.netlify.app/">
+  <meta property="og:image" content="https://car-and-general-ai.netlify.app/LinoLogo.svg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Car&Gen.AI - Official Car and General Assistant">
+  <meta name="twitter:description" content="Official assistant for Car and General Kenya Ltd — products, services, branches, contacts, warranties, and spare parts.">
+  <meta name="twitter:image" content="https://car-and-general-ai.netlify.app/LinoLogo.svg">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Car&Gen.AI",
+    "url": "https://car-and-general-ai.netlify.app/",
+    "logo": "https://car-and-general-ai.netlify.app/LinoLogo.svg",
+    "description": "Official assistant for Car and General Kenya Ltd — products, services, branches, contacts, warranties, and spare parts."
+  }
+  </script>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data: https://car-and-general-ai.netlify.app; connect-src 'self' https://openrouter.ai; object-src 'none'; base-uri 'self'; form-action 'self';">
+  <link rel="icon" type="image/svg+xml" href="LinoBulb.svg">
+  <link rel="apple-touch-icon" sizes="180x180" href="LinoBulb.svg">
+  <link rel="preload" as="image" href="LinoBulb.svg">
+  <link rel="preload" as="font" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/webfonts/fa-solid-900.woff2" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <script src="chat.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="header-flex">
+      <img src="LinoLogo.svg" alt="Car&Gen.AI Logo" class="company-logo" />
+      <span class="header-title">Car&Gen.AI Assistant</span>
+      <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Sidebar backdrop overlay for mobile -->
+  <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-header-top">
+          <h3>Conversations</h3>
+          <button id="sidebar-close" class="sidebar-close" aria-label="Close sidebar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <button id="new-chat-btn" class="new-chat-btn">
+          <i class="fas fa-plus"></i> New Chat
+        </button>
+      </div>
+      
+  <div class="conversations-list" id="conversations-list"></div>
+
+      <div class="sidebar-footer">
+        <div class="admin-info">
+          <small>Powered by Lino.AI © 2025</small>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Chat Area -->
+    <main class="chat-container" role="main">
+      <div class="chat-body">
+        <div id="chat-wrapper">
+          <div id="chat-box" class="chat-box" aria-live="polite" aria-atomic="false">
+            <div class="message-wrapper bot">
+              <div class="message bot-message">Hello! I'm Car&Gen.AI, the official Car and General assistant. Ask me about Car & General products, services, branches, contact information, warranties, or spare parts.</div>
+            </div>
+          </div>
+          <div id="loading-indicator" class="loading-indicator-hidden" aria-live="polite" aria-atomic="true">
+            <div class="typing-indicator">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        </div>
+        <form id="chat-form" autocomplete="off" aria-label="Chat input area">
+          <div class="input-container">
+            <input
+              type="text"
+              id="user-input"
+              placeholder="Chat with Car&Gen.AI..."
+              autocomplete="off"
+              aria-label="Type your message"
+            />
+            <button id="send-btn" type="submit" aria-label="Send message">
+              <i class="fas fa-paper-plane"></i>
+            </button>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <footer>
+    <p>&copy; 2025 – POWERED BY Lino.AI. All rights reserved.</p>
+  </footer>
+
+</body>
+</html>

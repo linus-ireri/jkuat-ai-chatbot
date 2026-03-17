@@ -86,10 +86,9 @@ async function queryRagServer(userMessage) {
  * @returns {Promise<object>} The LLM's response.
  */
 async function queryLlmWithContext(userMessage, context) {
-  const systemPrompt = SYSTEM_PROMPT + `\nGuidelines:\n1. Base answers ONLY on the retrieved context provided.\n
-  2. Cite specific documents or sources from the context when referenced.\n
-  3. If the context lacks relevant information, say "I don't have enough information about that in my knowledge base" and offer to direct the user to Car & General's official channels.\n
-  4. Avoid speculation or inference.\n5. Keep answers concise and practical.`;
+  const systemPrompt = SYSTEM_PROMPT + `\nGuidelines:\n1. Base answers ONLY on the retrieved context provided.\n2. Cite specific documents or sources from the context when referenced.\n
+  3. If the context lacks relevant information, say "I don't have enough information about that in my knowledge base. Please contact JKUAT's official enquiries for detailed assistance."\n
+  4. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?"\n5. Avoid speculation or inference.\n6. Keep answers concise and practical.`;
 
   const messages = [
     { role: "system", content: systemPrompt },
@@ -139,7 +138,7 @@ async function queryLlmWithContext(userMessage, context) {
  * @returns {Promise<object>} The LLM's response.
  */
 async function queryLlmFallback(userMessage) {
-  const systemPrompt = SYSTEM_PROMPT + `\nNo-context guidance: If no context is available, politely explain that you can only answer questions about Car and General based on available information, and suggest contacting official channels or providing specific product/branch/warranty details.`;
+  const systemPrompt = SYSTEM_PROMPT + `\nNo-context guidance: For JKUAT questions with no context available, answer based on general knowledge about the university or suggest contacting JKUAT's official enquiries. For non-JKUAT questions, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?"`;
 
   const messages = [
     { role: "system", content: systemPrompt },
@@ -208,17 +207,31 @@ exports.handler = async function (event, context) {
 
     const normalizedMessage = normalize(userMessage);
 
-    // 1) Greetings: if RAG is configured, use lightweight rule-based reply;
-    // if RAG is not configured/likely down, respond via LLM so it introduces capabilities.
+    // 1) Greetings: return rule-based reply
     const greetingResponse = getGreetingResponse(normalizedMessage);
     if (greetingResponse) {
-      if (!RAG_SERVER_URL) {
-        return await queryLlmFallback(userMessage);
-      }
       return greetingResponse;
     }
 
-    // 2) Query RAG server at /ask
+    // 2) Health check RAG server before attempting to use it
+    let ragIsHealthy = false;
+    try {
+      if (RAG_SERVER_URL) {
+        await axios.get(`${RAG_SERVER_URL}/health`, { timeout: 1000 });
+        ragIsHealthy = true;
+        console.log("RAG server is healthy");
+      }
+    } catch (healthError) {
+      console.log("RAG server health check failed, will use LLM fallback");
+      ragIsHealthy = false;
+    }
+
+    // If RAG is not healthy, use LLM fallback
+    if (!ragIsHealthy) {
+      return await queryLlmFallback(userMessage);
+    }
+
+    // 3) Query RAG server at /ask
     const ragData = await queryRagServer(userMessage);
     if (ragData) {
       if (ragData.answer) {
@@ -229,12 +242,12 @@ exports.handler = async function (event, context) {
         };
       }
       if (ragData.context && Array.isArray(ragData.context) && ragData.context.length > 0) {
-        // 3) LLM with context if no direct answer
+        // 4) LLM with context if no direct answer
         return await queryLlmWithContext(userMessage, ragData.context);
       }
     }
 
-    // 4) Fallback LLM without context
+    // 5) Fallback LLM without context
     return await queryLlmFallback(userMessage);
 
   } catch (error) {

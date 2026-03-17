@@ -113,19 +113,13 @@ exports.handler = async function(event, context) {
 async function processMessage(message, from) {
   const normalizedMessage = normalize(message); // lower-cased, punctuation-stripped
 
-  // Check for exact matches first (normalized)
+  // Check for exact greeting matches ONLY (normalized)
   if (greetingResponses[normalizedMessage]) {
     return greetingResponses[normalizedMessage];
   }
 
-  // Check for Lino.AI questions
-  for (const [key, response] of Object.entries(linoAIResponses)) {
-    if (normalizedMessage.includes(normalize(key))) {
-      return response;
-    }
-  }
-
   // Health check RAG server first
+  let ragIsHealthy = false;
   try {
     const RAG_SERVER_URL = process.env.RAG_SERVER_URL;
     if (!RAG_SERVER_URL) {
@@ -135,8 +129,25 @@ async function processMessage(message, from) {
       `${RAG_SERVER_URL}/health`,
       { timeout: 1000 } // 1 second timeout for health check
     );
+    ragIsHealthy = true;
+    console.log("RAG server is healthy");
   } catch (healthError) {
-    // If health check fails, use basic greeting responses
+    console.log("RAG server health check failed, will use fallback mode");
+    ragIsHealthy = false;
+  }
+
+  // If RAG is down, use common queries and LLM fallback
+  if (!ragIsHealthy) {
+    console.log("Using fallback mode without RAG");
+    
+    // Check for common query patterns
+    for (const [key, response] of Object.entries(commonQueries)) {
+      if (normalizedMessage.includes(normalize(key))) {
+        return response;
+      }
+    }
+
+    // For other questions, use LLM with FAQ context to answer
     const allFaqs = [
       ...Object.values(greetingResponses),
       ...Object.values(commonQueries)
@@ -145,10 +156,17 @@ async function processMessage(message, from) {
       if (!process.env.OPENROUTER_API_KEY) {
         throw new Error("OPENROUTER_API_KEY not set in environment");
       }
-      const systemPrompt = `You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Use a concise, professional tone. Do not answer questions unrelated to JKUAT; politely state you cannot help with unrelated topics. Never identify yourself as an AI model or mention model providers.`;
+      const systemPrompt = `You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Use a concise, professional tone. 
+
+When answering:
+1. Answer based on the official information provided below
+2. Be helpful and specific to JKUAT
+3. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to help with JKUAT-related inquiries. For other topics, please consult relevant resources. How can I help you with JKUAT?"
+4. Never identify yourself as an AI model or mention model providers.`;
+      
       const messages = [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `Official information: ${allFaqs}` },
+        { role: "user", content: `Official JKUAT information: ${allFaqs}` },
         { role: "user", content: message }
       ];
       const response = await axios.post(
@@ -168,11 +186,12 @@ async function processMessage(message, from) {
       const answer = response.data.choices?.[0]?.message?.content?.trim();
       return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
     } catch (llmError) {
+      console.error("Fallback LLM error:", llmError.message);
       return "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
     }
   }
 
-  // If health check passes, proceed with RAG (6s) and LLM fallback (4s)
+  // If RAG is healthy, proceed with RAG
   try {
     const RAG_SERVER_URL = process.env.RAG_SERVER_URL;
     if (!RAG_SERVER_URL) {
@@ -197,7 +216,7 @@ async function processMessage(message, from) {
         if (!process.env.OPENROUTER_API_KEY) {
           throw new Error("OPENROUTER_API_KEY not set in environment");
         }
-        const systemPrompt = `You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Base answers ONLY on the retrieved context provided. If the context lacks relevant information, say "I don't have enough information about that in my knowledge base" and offer to direct the user to JKUAT's official channels. Never identify yourself as an AI model or mention model providers.`;
+        const systemPrompt = `You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Base answers ONLY on the retrieved context provided. If the context lacks relevant information, say "I don't have enough information about that in my knowledge base. Please contact JKUAT's official enquiries for detailed assistance." For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?" Never identify yourself as an AI model or mention model providers.`;
         const messages = [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Retrieved context: ${Array.isArray(retrievedContext) ? retrievedContext.join(" ") : retrievedContext}` },
@@ -231,7 +250,7 @@ async function processMessage(message, from) {
       if (!process.env.OPENROUTER_API_KEY) {
         throw new Error("OPENROUTER_API_KEY not set in environment");
       }
-      const systemPrompt = `You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT using the official information provided. Do not speculate and do not use general knowledge. If the information is not present, say you do not have official information. Never identify yourself as an AI model or mention model providers.`;
+      const systemPrompt = `You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT using the official information provided. Do not speculate and do not use general knowledge. If the information is not present, say you do not have official information about that topic. For questions unrelated to JKUAT, politely redirect the user to JKUAT-related topics. Never identify yourself as an AI model or mention model providers.`;
       const messages = [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Official information: ${allFaqs}` },
@@ -263,7 +282,7 @@ async function processMessage(message, from) {
       if (!process.env.OPENROUTER_API_KEY) {
         throw new Error("OPENROUTER_API_KEY not set in environment");
       }
-      const systemPrompt = `You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Since no context is available for this query, politely explain that you can only answer questions about JKUAT based on available information, and suggest contacting official channels or providing specific course/program/campus details. Never identify yourself as an AI model or mention model providers.`;
+      const systemPrompt = `You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your primary role is to answer questions about JKUAT. For JKUAT questions, answer based on available information or suggest contacting official channels. For non-JKUAT questions, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?" Never identify yourself as an AI model or mention model providers.`;
       const messages = [
         { role: "system", content: systemPrompt },
         { role: "user", content: message }

@@ -11,11 +11,11 @@ import path from "path";
 // 📁 SOURCE FILES & CONFIG
 // ===============================
 const pdfPaths = [
-  "./docs/Car_and_General_RAG.pdf",
+  "./docs/MCS_timetable.pdf",
 ];
 
 const urls = [
-  "https://cargen.com"
+  "https://jkuat-ai.netlify.app/"
 ];
 
 const VECTOR_STORE_PATH = "./vector_store";

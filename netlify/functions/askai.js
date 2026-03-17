@@ -88,7 +88,9 @@ async function queryRagServer(userMessage) {
 async function queryLlmWithContext(userMessage, context) {
   const systemPrompt = SYSTEM_PROMPT + `\nGuidelines:\n1. Base answers ONLY on the retrieved context provided.\n2. Cite specific documents or sources from the context when referenced.\n
   3. If the context lacks relevant information, say "I don't have enough information about that in my knowledge base. Please contact JKUAT's official enquiries for detailed assistance."\n
-  4. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?"\n5. Avoid speculation or inference.\n6. Keep answers concise and practical.`;
+  4. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?"\n
+  5. Avoid speculation or inference.\n
+  6. Respond to greetings politely and ask back how the user is. Keep answers concise and practical and be jovial to keep conversation lively.`;
 
   const messages = [
     { role: "system", content: systemPrompt },

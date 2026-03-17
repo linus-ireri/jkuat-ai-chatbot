@@ -103,7 +103,7 @@ app.post('/ask', async (req, res) => {
     const results = await vectorStore.similaritySearch(question, 3);
     const context = results.map((doc, i) => `Context #${i + 1}:\n${doc.pageContent}`);
 
-    const systemPrompt = `You are the official JKUAT.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT).
+    const systemPrompt = `You are the official PAM.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT).
      Your role is to answer questions ONLY about JKUAT,
       including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations.
        Use a concise, professional tone. Do not answer questions unrelated to JKUAT;

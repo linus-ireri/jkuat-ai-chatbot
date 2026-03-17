@@ -6,7 +6,7 @@ const greetingResponses = {
   "hello": "Hello! Welcome to JKUAT.AI. Ask me about JKUAT courses, academic programs, campus directions, learning hours, admissions, or student services.",
   "hi": "Hi there! You're chatting with JKUAT.AI. How can I help with JKUAT today?",
   "hey": "Hello! This is JKUAT.AI — I can answer questions about JKUAT courses, academic programs, campus directions, learning hours, and student information.",
-  "how are you": "I'm here to help with JKUAT questions — what would you like to know about courses, campus, or student services?",
+  "how are you": "I'mhere to help with JKUAT questions — what would you like to know about courses, campus, or student services?",
   "how are you?": "I'm here to help with JKUAT questions — what would you like to know about courses, campus, or student services?",
   "good morning": "Good morning! JKUAT.AI at your service — would you like information about courses, campus directions, or learning hours?",
   "good afternoon": "Good afternoon! JKUAT.AI can help with courses, campus information, learning hours, and academic programs.",
@@ -161,9 +161,10 @@ async function processMessage(message, from) {
 When answering:
 1. Answer based on the official information provided below
 2. Be helpful and specific to JKUAT
-3. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to help with JKUAT-related inquiries. For other topics, please consult relevant resources. How can I help you with JKUAT?"
+3. For questions,  unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to help with JKUAT-related inquiries.
+ For other topics, please consult relevant resources. How can I help you with JKUAT?". ALso respond to greeting and ask how the user is to show politeness and keep the conversation lively.
 4. Never identify yourself as an AI model or mention model providers.`;
-      
+    
       const messages = [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Official JKUAT information: ${allFaqs}` },

@@ -8,6 +8,7 @@ const rl = readline.createInterface({
 });
 
 
+
 rl.question("Ask your question: ", async (question) => {
   try {
     const response = await fetch("http://localhost:3001/rag", {

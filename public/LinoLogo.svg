@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="300" height="80" viewBox="0 0 300 80" xmlns="http://www.w3.org/2000/svg">
+<svg width="500" height="80" viewBox="0 0 500 80" xmlns="http://www.w3.org/2000/svg">
   <!-- Bulb icon -->
   <circle cx="35" cy="40" r="25" fill="none" stroke="#F87060" stroke-width="3"/>
   <ellipse cx="35" cy="28" rx="18" ry="20" fill="none" stroke="#F87060" stroke-width="3"/>

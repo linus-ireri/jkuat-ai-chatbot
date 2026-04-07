@@ -11,7 +11,7 @@ import path from "path";
 // 📁 SOURCE FILES & CONFIG
 // ===============================
 const pdfPaths = [
-  "./docs/MCS_timetable.pdf",
+  "./docs/MCS_timetable (1).pdf",
 ];
 
 const urls = [

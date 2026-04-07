@@ -49,15 +49,21 @@ app.post('/rag', async (req, res) => {
     const results = await vectorStore.similaritySearch(question, 3);
     const context = results.map((doc, i) => `Context #${i + 1}:\n${doc.pageContent}`);
     
-    const systemPrompt = `You are the official JKUAT.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Use a concise, professional tone. Do not answer questions unrelated to JKUAT; politely state you cannot help with unrelated topics and, when appropriate, suggest contacting JKUAT's official channels (website or phone). Never identify yourself as an AI model or mention model providers.`;
+    const systemPrompt = `You are VeritasRAG.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). 
+    Your role is to answer questions ONLY about JKUAT, including courses offered,
+     academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations.
+      Use a concise, professional tone. Do not answer questions unrelated to JKUAT; 
+     politely state you cannot help with unrelated topics and, when appropriate, suggest contacting JKUAT's official channels (website or phone). Never identify yourself as an AI model or mention model providers.`;
     
-    const systemPromptWithContext = systemPrompt + `\nGuidelines:\n1. Base answers ONLY on the retrieved context provided.\n2. Cite specific documents or sources from the context when referenced.\n3. If the context lacks relevant information, say "I don't have enough information about that in my knowledge base" and offer to direct the user to JKUAT's official channels.\n4. Avoid speculation or inference.\n5. Keep answers concise and practical.`;
+    const systemPromptWithContext = systemPrompt + `\nGuidelines:\n1. Base answers ONLY on the retrieved context provided.\n
+    2. Cite specific documents or sources from the context when referenced.\n
+    3. If the context lacks relevant information, say "I don't have enough information about that in my knowledge base" and offer to direct the user to JKUAT's official channels.\n
+    4. Avoid speculation or inference.\n5. Keep answers concise and practical.`;
     
     const prompt = `Retrieved context: ${context.join(" ")}\n\nUser question: ${question}\n\nAnswer:`;
 
     // LLM call
     const apiKey = process.env.OPENROUTER_API_KEY;
-    console.log("OPENROUTER_API_KEY:", process.env.OPENROUTER_API_KEY);
     if (!apiKey) {
       return res.status(500).json({ error: 'OPENROUTER_API_KEY not set in environment' });
     }
@@ -103,7 +109,7 @@ app.post('/ask', async (req, res) => {
     const results = await vectorStore.similaritySearch(question, 3);
     const context = results.map((doc, i) => `Context #${i + 1}:\n${doc.pageContent}`);
 
-    const systemPrompt = `You are the official PAM.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT).
+    const systemPrompt = `You are VeritasRAG.AI, the official AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT).
      Your role is to answer questions ONLY about JKUAT,
       including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations.
        Use a concise, professional tone. Do not answer questions unrelated to JKUAT;

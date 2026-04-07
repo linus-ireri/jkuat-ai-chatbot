@@ -11,7 +11,7 @@ const rl = readline.createInterface({
 
 rl.question("Ask your question: ", async (question) => {
   try {
-    const response = await fetch("http://localhost:3001/rag", {
+    const response = await fetch("http://localhost:3001/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question })

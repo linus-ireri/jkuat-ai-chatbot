@@ -31,7 +31,7 @@ async function main() {
 
   // 🧠 Strict, structured prompt to prevent hallucination
   const prompt = `
-You are the official PAM.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your job is to answer the user's question *strictly and only* based on the provided context about JKUAT.
+You are VeritasRAG.AI, the official AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your job is to answer the user's question *strictly and only* based on the provided context about JKUAT.
 
 If the answer cannot be found exactly in the context, respond with:
 "I don't have that information in my knowledge base. Please contact JKUAT's official channels for assistance."
@@ -66,7 +66,8 @@ Answer:
       {
         model: "arcee-ai/trinity-large-preview:free",
         messages: [
-          { role: "system", content: "You are JKUAT.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Answer questions accurately based only on provided context about JKUAT's courses, academic programs, campus information, and university operations." },
+          { role: "system", content: "You are VeritasRAG.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Answer questions accurately based only on provided context about JKUAT's courses, academic programs, campus information, and university operations." },
+         
           { role: "user", content: prompt }
         ],
         temperature: 0.1, // 🔒 ensures factuality with minimal variation

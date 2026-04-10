@@ -174,6 +174,7 @@ async function queryLlmWithContext(userMessage, context) {
   }
 }
 
+
 /**
  * Queries the LLM as a fallback when the RAG server fails.
  * @param {string} userMessage - The user's message.

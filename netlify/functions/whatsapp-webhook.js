@@ -191,6 +191,9 @@ When answering:
         console.error("Fallback LLM error:", llmError.response?.status, llmError.response?.data || llmError.message);
         return "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.";
       }
+    } catch (error) {
+      console.error("Error in LLM fallback when RAG is down:", error);
+      return "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
     }
   }
 
@@ -280,6 +283,10 @@ When answering:
         console.error("Error in LLM request:", llmError.response?.status, llmError.response?.data || llmError.message);
         return "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.";
       }
+    } catch (error) {
+      console.error("Error in fallback LLM request:", error);
+      return "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
+    }
   } catch (error) {
     console.error("Error in RAG request:", error);
     // If RAG fails, proceed with LLM fallback using greetings and common query context

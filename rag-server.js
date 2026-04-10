@@ -76,7 +76,7 @@ app.post('/rag', async (req, res) => {
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         {
-          model: "nvidia/nemotron-3-super-120b-a12b:free",
+          model: "microsoft/wizardlm-2-8x22b:free",
           messages
         },
         {

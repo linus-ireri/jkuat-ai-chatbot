@@ -6,7 +6,6 @@ if (!process.env.OPENROUTER_API_KEY) {
 }
 
 // --- Constants ---
-const RAG_SERVER_URL = process.env.RAG_SERVER_URL; // optional: if missing, we'll skip RAG and use LLM fallback
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const GREETING_RESPONSES = {
   "who are you": "I am Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",
@@ -17,6 +16,13 @@ const GREETING_RESPONSES = {
   "good morning": "Good morning! Veritas.AI at your service — would you like information about courses, campus directions, or learning hours?",
   "good afternoon": "Good afternoon! Veritas.AI can help with courses, campus information, learning hours, and academic programs.",
   "good evening": "Good evening! Ask me about JKUAT courses, campus directions, learning hours, or student services."
+};
+
+const COMMON_QUERIES = {
+  "what do you do": "I assist with questions about JKUAT, including courses, academic programs, campus directions, learning hours, admissions, and student services.",
+  "how can you help": "I can provide information about JKUAT courses, academic programs, campus directions, contact details, learning hours, and student services. Feel free to ask!",
+  "what information do you have": "I have information about JKUAT's courses, academic programs, campus directions, learning hours, admissions requirements, and student services.",
+  "help": "I can help you with JKUAT questions. Ask about our courses, academic programs, campus directions, learning hours, or student services."
 };
 
 // --- System prompt (hard-coded) 
@@ -35,6 +41,38 @@ const SYSTEM_PROMPT = `You are Veritas, the official JKUAT AI assistant for Jomo
  */
 function normalize(text) {
   return text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function buildRuleBasedContextBlock() {
+  const greetingLines = Object.entries(GREETING_RESPONSES).map(
+    ([intent, text]) => `- When the user means "${intent}": ${text}`
+  );
+  const queryLines = Object.entries(COMMON_QUERIES).map(
+    ([intent, text]) => `- When the user asks about "${intent}": ${text}`
+  );
+  return [
+    "Official reference snippets for common greetings and queries (match intent; you may paraphrase naturally while keeping the same facts and JKUAT focus):",
+    "",
+    "Greetings / identity:",
+    ...greetingLines,
+    "",
+    "Common queries:",
+    ...queryLines,
+  ].join("\n");
+}
+
+function ragAskUrl() {
+  const raw = process.env.RAG_SERVER_URL;
+  if (!raw || !String(raw).trim()) return null;
+  const t = String(raw).replace(/\/$/, "");
+  if (/\/ask$/i.test(t)) return t;
+  return `${t}/ask`;
+}
+
+function ragBaseUrl() {
+  const ask = ragAskUrl();
+  if (!ask) return null;
+  return ask.replace(/\/ask$/i, "");
 }
 
 /**
@@ -64,11 +102,10 @@ function getGreetingResponse(normalizedMessage) {
  */
 async function queryRagServer(userMessage) {
   try {
-    if (!RAG_SERVER_URL) {
+    const ragUrl = ragAskUrl();
+    if (!ragUrl) {
       return null;
     }
-    // Use the configured endpoint as-is; expected to be '/ask'
-    const ragUrl = RAG_SERVER_URL;
     console.log("Querying RAG server at:", ragUrl);
     const ragResponse = await axios.post(
       ragUrl,
@@ -104,7 +141,7 @@ async function queryLlmWithContext(userMessage, context) {
   try {
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
-      { model: "nvidia/nemotron-3-super-120b-a12b:free", messages },
+      { model: "arcee-ai/trinity-large-preview:free", messages },
       {
         headers: {
           "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
@@ -143,18 +180,25 @@ async function queryLlmWithContext(userMessage, context) {
  * @returns {Promise<object>} The LLM's response.
  */
 async function queryLlmFallback(userMessage) {
-  const systemPrompt = SYSTEM_PROMPT + `\nNo-context guidance: For JKUAT questions with no context available, answer based on general knowledge about the university or suggest contacting JKUAT's official enquiries. For non-JKUAT questions, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?"`;
+  const ruleContext = buildRuleBasedContextBlock();
+  const systemPrompt =
+    SYSTEM_PROMPT +
+    `\nDocument RAG is unavailable. Use the reference snippets in the next message when they match the user's intent; for other JKUAT topics answer from general knowledge or suggest JKUAT official enquiries. For non-JKUAT questions, politely redirect to JKUAT topics.`;
 
   const messages = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: userMessage }
+    {
+      role: "user",
+      content: `Reference:\n${ruleContext}\n\nUser message: ${userMessage}`,
+    },
   ];
 
   try {
+    console.log("Making LLM fallback call for:", userMessage.substring(0, 100) + "...");
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "nvidia/nemotron-3-super-120b-a12b:free",
+        model: "arcee-ai/trinity-large-preview:free",
         messages
       },
       {
@@ -166,6 +210,7 @@ async function queryLlmFallback(userMessage) {
       }
     );
     const answer = response.data.choices?.[0]?.message?.content?.trim();
+    console.log("LLM fallback response received, length:", answer?.length || 0);
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -212,31 +257,31 @@ exports.handler = async function (event, context) {
 
     const normalizedMessage = normalize(userMessage);
 
-    // 1) Greetings: return rule-based reply
+    let ragIsHealthy = false;
+    const base = ragBaseUrl();
+    try {
+      if (base) {
+        await axios.get(`${base}/health`, { timeout: 1000 });
+        ragIsHealthy = true;
+        console.log("RAG server is healthy");
+      } else {
+        console.log("RAG_SERVER_URL not set; using LLM with rule-based reference context");
+      }
+    } catch (healthError) {
+      console.log("RAG server health check failed, will use LLM fallback with rule context");
+      ragIsHealthy = false;
+    }
+
+    if (!ragIsHealthy) {
+      return await queryLlmFallback(userMessage);
+    }
+
     const greetingResponse = getGreetingResponse(normalizedMessage);
     if (greetingResponse) {
       return greetingResponse;
     }
 
-    // 2) Health check RAG server before attempting to use it
-    let ragIsHealthy = false;
-    try {
-      if (RAG_SERVER_URL) {
-        await axios.get(`${RAG_SERVER_URL}/health`, { timeout: 1000 });
-        ragIsHealthy = true;
-        console.log("RAG server is healthy");
-      }
-    } catch (healthError) {
-      console.log("RAG server health check failed, will use LLM fallback");
-      ragIsHealthy = false;
-    }
-
-    // If RAG is not healthy, use LLM fallback
-    if (!ragIsHealthy) {
-      return await queryLlmFallback(userMessage);
-    }
-
-    // 3) Query RAG server at /ask
+    // Query RAG server at /ask
     const ragData = await queryRagServer(userMessage);
     if (ragData) {
       if (ragData.answer) {

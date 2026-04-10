@@ -113,79 +113,58 @@ exports.handler = async function(event, context) {
 async function processMessage(message, from) {
   const normalizedMessage = normalize(message); // lower-cased, punctuation-stripped
 
-  // Check for exact greeting matches ONLY (normalized)
-  if (greetingResponses[normalizedMessage]) {
-    return greetingResponses[normalizedMessage];
-  }
-
-  // Health check RAG server first
   let ragIsHealthy = false;
+  const ragBase = ragBaseUrl();
   try {
-    const RAG_SERVER_URL = process.env.RAG_SERVER_URL;
-    if (!RAG_SERVER_URL) {
-      throw new Error("RAG_SERVER_URL not set in environment");
+    if (ragBase) {
+      await axios.get(`${ragBase}/health`, { timeout: 1000 });
+      ragIsHealthy = true;
+      console.log("RAG server is healthy");
+    } else {
+      console.log("RAG_SERVER_URL not set; using LLM with rule-based reference context");
     }
-    await axios.get(
-      `${RAG_SERVER_URL}/health`,
-      { timeout: 1000 } // 1 second timeout for health check
-    );
-    ragIsHealthy = true;
-    console.log("RAG server is healthy");
   } catch (healthError) {
     console.log("RAG server health check failed, will use fallback mode");
     ragIsHealthy = false;
   }
 
-  // If RAG is down, use common queries and LLM fallback
   if (!ragIsHealthy) {
-    console.log("Using fallback mode without RAG");
-    
-    // Check for common query patterns
-    for (const [key, response] of Object.entries(commonQueries)) {
-      if (normalizedMessage.includes(normalize(key))) {
-        return response;
-      }
-    }
-
-    // For other questions, use LLM with FAQ context to answer
-    const allFaqs = [
-      ...Object.values(greetingResponses),
-      ...Object.values(commonQueries)
-    ].join(" ");
+    console.log("Using fallback mode without RAG (LLM + greeting/common reference context)");
     try {
       if (!process.env.OPENROUTER_API_KEY) {
         throw new Error("OPENROUTER_API_KEY not set in environment");
       }
-      const systemPrompt = `You are Veritas.AI, the official AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Use a concise, professional tone. 
+      const ruleContext = buildRuleBasedContextBlock();
+      const systemPrompt = `You are Veritas.AI, the official AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Document RAG is offline: use the reference snippets in the next message when they match the user's intent; for other JKUAT topics use general knowledge. Be concise and professional. For non-JKUAT questions, redirect politely to JKUAT topics.`;
 
-When answering:
-1. Answer based on the official information provided below
-2. Be helpful and specific to JKUAT
-3. For questions,  unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to help with JKUAT-related inquiries.
- For other topics, please consult relevant resources. How can I help you with JKUAT?". ALso respond to greeting and ask how the user is to show politeness and keep the conversation lively.
-4. Never identify yourself as an AI model or mention model providers.`;
-    
       const messages = [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `Official JKUAT information: ${allFaqs}` },
-        { role: "user", content: message }
+        {
+          role: "user",
+          content: `Reference:\n${ruleContext}\n\nUser message: ${message}`,
+        },
       ];
       try {
+        console.log("Making LLM fallback call for message:", message.substring(0, 100) + "...");
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
           {
-            model: "nvidia/nemotron-3-super-120b-a12b:free",
-            messages
+            model: "arcee-ai/trinity-large-preview:free",
+            messages,
+            max_tokens: 150,
+            temperature: 0.7
           },
           {
             headers: {
               "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
               "Content-Type": "application/json"
             },
-            timeout: 4000 // 4 seconds timeout for LLM when RAG is up
+            timeout: 8000 // 8 seconds timeout for LLM fallback
           }
         );
         const answer = response.data.choices?.[0]?.message?.content?.trim();
+        console.log("LLM response received, length:", answer?.length || 0);
+        console.log("Full response data:", JSON.stringify(response.data, null, 2));
         return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
       } catch (llmError) {
         console.error("Fallback LLM error:", llmError.response?.status, llmError.response?.data || llmError.message);
@@ -195,6 +174,10 @@ When answering:
       console.error("Error in LLM fallback when RAG is down:", error);
       return "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
     }
+  }
+
+  if (greetingResponses[normalizedMessage]) {
+    return greetingResponses[normalizedMessage];
   }
 
   // If RAG is healthy, proceed with RAG
@@ -230,7 +213,7 @@ When answering:
         ];
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
-          { model: "nvidia/nemotron-3-super-120b-a12b:free", messages },
+          { model: "arcee-ai/trinity-large-preview:free", messages },
           {
             headers: {
               'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -266,7 +249,7 @@ When answering:
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
           {
-            model: "nvidia/nemotron-3-super-120b-a12b:free",
+            model: "arcee-ai/trinity-large-preview:free",
             messages
           },
           {
@@ -301,12 +284,11 @@ When answering:
       const systemPrompt = `You are Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your primary role is to answer questions about JKUAT. For JKUAT questions, answer based on available information or suggest contacting official channels. For non-JKUAT questions, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?" Never identify yourself as an AI model or mention model providers.`;
       const messages = [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `Official JKUAT information: ${allFaqs}` },
         { role: "user", content: message }
       ];
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
-        { model: "nvidia/nemotron-3-super-120b-a12b:free", messages },
+        { model: "arcee-ai/trinity-large-preview:free", messages },
         {
           headers: {
             'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -326,6 +308,32 @@ When answering:
 
 function normalize(text) {
   return text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function buildRuleBasedContextBlock() {
+  const greetingLines = Object.entries(greetingResponses).map(
+    ([intent, text]) => `- When the user means "${intent}": ${text}`
+  );
+  const queryLines = Object.entries(commonQueries).map(
+    ([intent, text]) => `- When the user asks about "${intent}": ${text}`
+  );
+  return [
+    "Official reference snippets for common greetings and queries (match intent; you may paraphrase naturally while keeping the same facts and JKUAT focus):",
+    "",
+    "Greetings / identity:",
+    ...greetingLines,
+    "",
+    "Common queries:",
+    ...queryLines,
+  ].join("\n");
+}
+
+function ragBaseUrl() {
+  const raw = process.env.RAG_SERVER_URL;
+  if (!raw || !String(raw).trim()) return null;
+  const t = String(raw).replace(/\/$/, "");
+  if (/\/ask$/i.test(t)) return t.replace(/\/ask$/i, "") || t;
+  return t;
 }
 
 function getCannedReply(userMessage) {

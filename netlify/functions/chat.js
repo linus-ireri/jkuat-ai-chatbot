@@ -33,6 +33,73 @@ function getCannedReply(userMessage) {
   return null;
 }
 
+/** Structured snippets for the LLM when RAG is unavailable (not used as final canned text). */
+function buildRuleBasedContextBlock() {
+  const greetingLines = Object.entries(greetingResponses).map(
+    ([intent, text]) => `- When the user means "${intent}": ${text}`
+  );
+  const queryLines = Object.entries(commonQueries).map(
+    ([intent, text]) => `- When the user asks about "${intent}": ${text}`
+  );
+  return [
+    "Official reference snippets for common greetings and queries (match intent; you may paraphrase naturally while keeping the same facts and JKUAT focus):",
+    "",
+    "Greetings / identity:",
+    ...greetingLines,
+    "",
+    "Common queries:",
+    ...queryLines,
+  ].join("\n");
+}
+
+function ragBaseAndAsk() {
+  const raw = process.env.RAG_SERVER_URL;
+  if (!raw || !String(raw).trim()) return { base: null, askUrl: null };
+  const trimmed = String(raw).replace(/\/$/, "");
+  if (/\/ask$/i.test(trimmed)) {
+    const base = trimmed.replace(/\/ask$/i, "");
+    return { base: base || trimmed, askUrl: trimmed };
+  }
+  return { base: trimmed, askUrl: `${trimmed}/ask` };
+}
+
+async function openRouterLlmWithRuleContext(userMessage, apiKey) {
+  const ruleContext = buildRuleBasedContextBlock();
+  const systemContent = `You are Veritas, the official JKUAT.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Answer questions about JKUAT courses, programs, campus, admissions, and services. Be concise and professional. Document RAG is offline: use the reference snippets in the next message when they match the user's intent; for other JKUAT topics use general knowledge; for non-JKUAT topics, politely redirect.`;
+  const llmRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "arcee-ai/trinity-large-preview:free",
+      messages: [
+        { role: "system", content: systemContent },
+        {
+          role: "user",
+          content: `Reference:\n${ruleContext}\n\nUser message: ${userMessage}`,
+        },
+      ],
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!llmRes.ok) {
+    const errorText = await llmRes.text();
+    console.error(`LLM fallback HTTP error ${llmRes.status}:`, errorText);
+    return {
+      reply:
+        "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.",
+      source: "llm-fallback-error",
+    };
+  }
+  const llmData = await llmRes.json();
+  const answer =
+    llmData?.choices?.[0]?.message?.content?.trim() ||
+    "Sorry, I do not have official information on that topic.";
+  return { reply: answer, source: "llm-fallback" };
+}
+
 exports.handler = async function (event, context) {
   if (event.httpMethod !== "POST") {
     return {
@@ -57,94 +124,68 @@ exports.handler = async function (event, context) {
 
     console.log("Received user message:", userMessage);
 
-    // First, check RAG server health
+    const { base: ragBase, askUrl: ragAskUrl } = ragBaseAndAsk();
+
     let ragIsHealthy = false;
-    try {
-      const ragUrl = process.env.RAG_SERVER_URL || "http://localhost:3001";
-      const healthCheck = await fetch(`${ragUrl}/health`, {
-        signal: AbortSignal.timeout(1000)
-      });
-      ragIsHealthy = healthCheck.ok;
-      console.log("RAG server health check:", ragIsHealthy ? "healthy" : "unhealthy");
-    } catch (e) {
-      console.error("RAG server health check failed:", e.message);
-      ragIsHealthy = false;
+    if (ragBase) {
+      try {
+        const healthCheck = await fetch(`${ragBase}/health`, {
+          signal: AbortSignal.timeout(1000),
+        });
+        ragIsHealthy = healthCheck.ok;
+        console.log("RAG server health check:", ragIsHealthy ? "healthy" : "unhealthy");
+      } catch (e) {
+        console.error("RAG server health check failed:", e.message);
+        ragIsHealthy = false;
+      }
+    } else {
+      console.log("RAG_SERVER_URL not set; treating RAG as unavailable");
     }
 
-    // If RAG is not healthy, use LLM fallback
+    const jsonHeaders = {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
+    // RAG down: LLM answers using greetings + common queries as reference context
     if (!ragIsHealthy) {
-      console.log("RAG server not available, using LLM fallback");
-      const cannedReply = getCannedReply(userMessage);
-      if (cannedReply) {
-        return {
-          statusCode: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-          body: JSON.stringify({ reply: cannedReply, context: [], source: "canned-fallback" }),
-        };
-      }
-      const allFaqs = [
-        ...Object.values(greetingResponses),
-        ...Object.values(commonQueries)
-      ].join(" ");
+      console.log("RAG server not available, using LLM with rule-based reference context");
       try {
         const apiKey = process.env.OPENROUTER_API_KEY;
         if (!apiKey) {
           throw new Error("Missing OPENROUTER_API_KEY");
         }
-        const llmRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: "nvidia/nemotron-3-super-120b-a12b:free",
-            messages: [
-              { role: "system", content: `You are Veritas, the official JKUAT.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Use a concise, professional tone. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?" Never identify yourself as an AI model or mention model providers.` },
-              { role: "user", content: `Official JKUAT information: ${allFaqs}` },
-              { role: "user", content: userMessage }
-            ]
-          }),
-          signal: AbortSignal.timeout(8000)
-        });
-        if (!llmRes.ok) {
-          const errorText = await llmRes.text();
-          console.error(`LLM fallback HTTP error ${llmRes.status}:`, errorText);
-          return {
-            statusCode: 200,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Headers": "Content-Type",
-            },
-            body: JSON.stringify({ reply: "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.", context: [], source: "llm-fallback-error" }),
-          };
-        }
-        const llmData = await llmRes.json();
-        const answer = llmData?.choices?.[0]?.message?.content?.trim() || "Sorry, I do not have official information on that topic.";
+        console.log("Making LLM call with rule context for:", userMessage.substring(0, 100) + "...");
+        const { reply, source } = await openRouterLlmWithRuleContext(userMessage, apiKey);
         return {
           statusCode: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-          body: JSON.stringify({ reply: answer, context: [], source: "llm-fallback" }),
+          headers: jsonHeaders,
+          body: JSON.stringify({ reply, context: [], source }),
         };
       } catch (llmErr) {
         console.error("LLM fallback error:", llmErr.message);
+        const cannedReply = getCannedReply(userMessage);
+        if (cannedReply) {
+          return {
+            statusCode: 200,
+            headers: jsonHeaders,
+            body: JSON.stringify({
+              reply: cannedReply,
+              context: [],
+              source: "canned-after-llm-error",
+            }),
+          };
+        }
         return {
           statusCode: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-          body: JSON.stringify({ reply: "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.", context: [], source: "error" }),
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            reply:
+              "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.",
+            context: [],
+            source: "error",
+          }),
         };
       }
     }
@@ -152,7 +193,7 @@ exports.handler = async function (event, context) {
     // RAG is healthy, attempt RAG server
     let response;
     try {
-      response = await fetch(process.env.RAG_SERVER_URL || "http://localhost:3001/ask", {
+      response = await fetch(ragAskUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -168,79 +209,41 @@ exports.handler = async function (event, context) {
     }
 
     if (!response || !response.ok) {
-      console.error("RAG server request failed, falling back to LLM");
-      const cannedReply = getCannedReply(userMessage);
-      if (cannedReply) {
-        return {
-          statusCode: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-          body: JSON.stringify({ reply: cannedReply, context: [], source: "canned-fallback" }),
-        };
-      }
-      const allFaqs = [
-        ...Object.values(greetingResponses),
-        ...Object.values(commonQueries)
-      ].join(" ");
-      // Fallback to LLM directly (OpenRouter) if RAG request fails
+      console.error("RAG server request failed, falling back to LLM with rule-based context");
       try {
         const apiKey = process.env.OPENROUTER_API_KEY;
         if (!apiKey) {
           throw new Error("Missing OPENROUTER_API_KEY");
         }
-        const llmRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: "nvidia/nemotron-3-super-120b-a12b:free",
-            messages: [
-              { role: "system", content: `You are Veritas, the official JKUAT AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Use a concise, professional tone. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?" Never identify yourself as an AI model or mention model providers.` },
-              { role: "user", content: `Official JKUAT information: ${allFaqs}` },
-              { role: "user", content: userMessage }
-            ]
-          }),
-          signal: AbortSignal.timeout(8000)
-        });
-        if (!llmRes.ok) {
-          const errorText = await llmRes.text();
-          console.error(`LLM fallback HTTP error ${llmRes.status}:`, errorText);
-          return {
-            statusCode: 200,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Headers": "Content-Type",
-            },
-            body: JSON.stringify({ reply: "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.", context: [], source: "llm-fallback-error" }),
-          };
-        }
-        const llmData = await llmRes.json();
-        const answer = llmData?.choices?.[0]?.message?.content?.trim() || "Sorry, I do not have official information on that topic.";
+        const { reply, source } = await openRouterLlmWithRuleContext(userMessage, apiKey);
         return {
           statusCode: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-          body: JSON.stringify({ reply: answer, context: [], source: "llm-fallback" }),
+          headers: jsonHeaders,
+          body: JSON.stringify({ reply, context: [], source }),
         };
       } catch (llmErr) {
         console.error("LLM fallback error:", llmErr.message);
+        const cannedReply = getCannedReply(userMessage);
+        if (cannedReply) {
+          return {
+            statusCode: 200,
+            headers: jsonHeaders,
+            body: JSON.stringify({
+              reply: cannedReply,
+              context: [],
+              source: "canned-after-llm-error",
+            }),
+          };
+        }
         return {
           statusCode: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-          body: JSON.stringify({ reply: "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.", context: [], source: "error" }),
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            reply:
+              "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.",
+            context: [],
+            source: "error",
+          }),
         };
       }
     }

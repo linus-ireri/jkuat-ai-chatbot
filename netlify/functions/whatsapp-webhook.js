@@ -6,7 +6,7 @@ const greetingResponses = {
   "hello": "Hello! Welcome to Veritas.AI. Ask me about JKUAT courses, academic programs, campus directions, learning hours, admissions, or student services.",
   "hi": "Hi there! You're chatting with Veritas.AI. How can I help with JKUAT today?",
   "hey": "Hello! This is Veritas.AI — I can answer questions about JKUAT courses, academic programs, campus directions, learning hours, and student information.",
-  "how are you": "I'mhere to help with JKUAT questions — what would you like to know about courses, campus, or student services?",
+  "how are you": "I'm here to help with JKUAT questions — what would you like to know about courses, campus, or student services?",
   "how are you?": "I'm here to help with JKUAT questions — what would you like to know about courses, campus, or student services?",
   "good morning": "Good morning! JKUAT.AI at your service — would you like information about courses, campus directions, or learning hours?",
   "good afternoon": "Good afternoon! Veritas.AI can help with courses, campus information, learning hours, and academic programs.",
@@ -170,26 +170,27 @@ When answering:
         { role: "user", content: `Official JKUAT information: ${allFaqs}` },
         { role: "user", content: message }
       ];
-      const response = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          model: "cohere/rerank-4-fast",
-          messages
-        },
-        {
-          headers: {
-            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json"
+      try {
+        const response = await axios.post(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            model: "cohere/rerank-4-fast",
+            messages
           },
-          timeout: 4000 // 4 seconds timeout for LLM fallback
-        }
-      );
-      const answer = response.data.choices?.[0]?.message?.content?.trim();
-      return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
-    } catch (llmError) {
-      console.error("Fallback LLM error:", llmError.message);
-      return "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
-    }
+          {
+            headers: {
+              "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              "Content-Type": "application/json"
+            },
+            timeout: 4000 // 4 seconds timeout for LLM fallback
+          }
+        );
+        const answer = response.data.choices?.[0]?.message?.content?.trim();
+        return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
+      } catch (llmError) {
+        console.error("Fallback LLM error:", llmError.response?.status, llmError.response?.data || llmError.message);
+        return "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.";
+      }
   }
 
   // If RAG is healthy, proceed with RAG
@@ -257,35 +258,42 @@ When answering:
         { role: "user", content: `Official information: ${allFaqs}` },
         { role: "user", content: message }
       ];
-      const response = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          model: "cohere/rerank-4-fast",
-          messages
-        },
-        {
-          headers: {
-            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json"
+      try {
+        const response = await axios.post(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            model: "cohere/rerank-4-fast",
+            messages
           },
-          timeout: 4000 // 4 seconds timeout for LLM fallback
-        }
-      );
-      const answer = response.data.choices?.[0]?.message?.content?.trim();
-      return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
-    } catch (llmError) {
-      return "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
-    }
+          {
+            headers: {
+              "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              "Content-Type": "application/json"
+            },
+            timeout: 4000 // 4 seconds timeout for LLM fallback
+          }
+        );
+        const answer = response.data.choices?.[0]?.message?.content?.trim();
+        return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
+      } catch (llmError) {
+        console.error("Error in LLM request:", llmError.response?.status, llmError.response?.data || llmError.message);
+        return "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.";
+      }
   } catch (error) {
     console.error("Error in RAG request:", error);
-    // If RAG fails, proceed with LLM fallback with no context
+    // If RAG fails, proceed with LLM fallback using greetings and common query context
     try {
       if (!process.env.OPENROUTER_API_KEY) {
         throw new Error("OPENROUTER_API_KEY not set in environment");
       }
+      const allFaqs = [
+        ...Object.values(greetingResponses),
+        ...Object.values(commonQueries)
+      ].join(" ");
       const systemPrompt = `You are Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your primary role is to answer questions about JKUAT. For JKUAT questions, answer based on available information or suggest contacting official channels. For non-JKUAT questions, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?" Never identify yourself as an AI model or mention model providers.`;
       const messages = [
         { role: "system", content: systemPrompt },
+        { role: "user", content: `Official JKUAT information: ${allFaqs}` },
         { role: "user", content: message }
       ];
       const response = await axios.post(

@@ -102,7 +102,7 @@ exports.handler = async function (event, context) {
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            model: "meta-llama/llama-3.2-3b-instruct:free",
+            model: "nvidia/nemotron-3-super-120b-a12b:free",
             messages: [
               { role: "system", content: `You are Veritas, the official JKUAT.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Use a concise, professional tone. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?" Never identify yourself as an AI model or mention model providers.` },
               { role: "user", content: `Official JKUAT information: ${allFaqs}` },
@@ -198,7 +198,7 @@ exports.handler = async function (event, context) {
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            model: "meta-llama/llama-3.2-3b-instruct:free",
+            model: "nvidia/nemotron-3-super-120b-a12b:free",
             messages: [
               { role: "system", content: `You are Veritas, the official JKUAT AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Use a concise, professional tone. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?" Never identify yourself as an AI model or mention model providers.` },
               { role: "user", content: `Official JKUAT information: ${allFaqs}` },

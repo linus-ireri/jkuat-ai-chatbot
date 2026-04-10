@@ -16,6 +16,23 @@ const commonQueries = {
   "help": "I can help you with JKUAT questions. Ask about our courses, academic programs, campus directions, learning hours, or student services."
 };
 
+function normalize(text) {
+  return text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getCannedReply(userMessage) {
+  const normalized = normalize(userMessage);
+  if (greetingResponses[normalized]) {
+    return greetingResponses[normalized];
+  }
+  for (const [key, reply] of Object.entries(commonQueries)) {
+    if (normalized.includes(normalize(key))) {
+      return reply;
+    }
+  }
+  return null;
+}
+
 exports.handler = async function (event, context) {
   if (event.httpMethod !== "POST") {
     return {
@@ -57,6 +74,18 @@ exports.handler = async function (event, context) {
     // If RAG is not healthy, use LLM fallback
     if (!ragIsHealthy) {
       console.log("RAG server not available, using LLM fallback");
+      const cannedReply = getCannedReply(userMessage);
+      if (cannedReply) {
+        return {
+          statusCode: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+          body: JSON.stringify({ reply: cannedReply, context: [], source: "canned-fallback" }),
+        };
+      }
       const allFaqs = [
         ...Object.values(greetingResponses),
         ...Object.values(commonQueries)
@@ -140,6 +169,18 @@ exports.handler = async function (event, context) {
 
     if (!response || !response.ok) {
       console.error("RAG server request failed, falling back to LLM");
+      const cannedReply = getCannedReply(userMessage);
+      if (cannedReply) {
+        return {
+          statusCode: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+          body: JSON.stringify({ reply: cannedReply, context: [], source: "canned-fallback" }),
+        };
+      }
       const allFaqs = [
         ...Object.values(greetingResponses),
         ...Object.values(commonQueries)
@@ -220,6 +261,18 @@ const cleanedReply = data?.answer?.trim() || "Hello! I'm Veritas, the official J
     };
   } catch (error) {
     console.error("Server Error:", error.message);
+    const cannedReply = getCannedReply(body.message || "");
+    if (cannedReply) {
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+        body: JSON.stringify({ reply: cannedReply, context: [], source: "canned-fallback" }),
+      };
+    }
     return {
       statusCode: 500,
       body: JSON.stringify({ error: "Server Error: " + error.message }),

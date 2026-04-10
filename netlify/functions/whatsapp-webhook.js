@@ -191,10 +191,11 @@ When answering:
         console.error("Fallback LLM error:", llmError.response?.status, llmError.response?.data || llmError.message);
         return "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.";
       }
+    }
   }
 
   // If RAG is healthy, proceed with RAG
-  try {
+  try{
     const RAG_SERVER_URL = process.env.RAG_SERVER_URL;
     if (!RAG_SERVER_URL) {
       throw new Error("RAG_SERVER_URL not set in environment");
@@ -318,6 +319,19 @@ When answering:
 
 function normalize(text) {
   return text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getCannedReply(userMessage) {
+  const normalized = normalize(userMessage);
+  if (greetingResponses[normalized]) {
+    return greetingResponses[normalized];
+  }
+  for (const [key, reply] of Object.entries(commonQueries)) {
+    if (normalized.includes(normalize(key))) {
+      return reply;
+    }
+  }
+  return null;
 }
 
 // Function to send message back to WhatsApp

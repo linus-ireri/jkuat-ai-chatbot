@@ -104,7 +104,7 @@ async function queryLlmWithContext(userMessage, context) {
   try {
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
-      { model: "arcee-ai/trinity-large-preview:free", messages },
+      { model: "cohere/rerank-4-fast", messages },
       {
         headers: {
           "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
@@ -154,7 +154,7 @@ async function queryLlmFallback(userMessage) {
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "arcee-ai/trinity-large-preview:free",
+        model: "cohere/rerank-4-fast",
         messages
       },
       {

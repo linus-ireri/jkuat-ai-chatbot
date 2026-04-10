@@ -76,7 +76,7 @@ app.post('/rag', async (req, res) => {
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         {
-          model: "arcee-ai/trinity-large-preview:free",
+          model: "cohere/rerank-4-fast",
           messages
         },
         {
@@ -134,7 +134,7 @@ app.post('/ask', async (req, res) => {
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
 
-        { model: "arcee-ai/trinity-large-preview:free", messages },
+        { model: "cohere/rerank-4-fast", messages },
         {
           headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
           timeout: 20000

@@ -173,7 +173,7 @@ When answering:
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         {
-          model: "arcee-ai/trinity-large-preview:free",
+          model: "cohere/rerank-4-fast",
           messages
         },
         {
@@ -225,7 +225,7 @@ When answering:
         ];
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
-          { messages },
+          { model: "cohere/rerank-4-fast", messages },
           {
             headers: {
               'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -260,7 +260,7 @@ When answering:
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         {
-          model: "arcee-ai/trinity-large-preview:free",
+          model: "cohere/rerank-4-fast",
           messages
         },
         {
@@ -290,7 +290,7 @@ When answering:
       ];
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
-        { messages },
+        { model: "cohere/rerank-4-fast", messages },
         {
           headers: {
             'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,

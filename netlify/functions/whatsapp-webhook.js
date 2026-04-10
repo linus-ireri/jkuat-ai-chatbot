@@ -182,7 +182,7 @@ When answering:
               "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
               "Content-Type": "application/json"
             },
-            timeout: 4000 // 4 seconds timeout for LLM fallback
+            timeout: 4000 // 4 seconds timeout for LLM when RAG is up
           }
         );
         const answer = response.data.choices?.[0]?.message?.content?.trim();
@@ -203,7 +203,7 @@ When answering:
     const ragResponse = await axios.post(
       `${RAG_SERVER_URL}/rag`,
       { question: message },
-      { timeout: 6000 } // 6 seconds timeout for RAG
+      { timeout: 5000 } // 5 seconds timeout for RAG retrieval when up
     );
 
     // If answer is present, return it
@@ -233,7 +233,7 @@ When answering:
               'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
               'Content-Type': 'application/json'
             },
-            timeout: 4000 // 4 seconds timeout for LLM fallback
+            timeout: 8000 // 8 seconds timeout for LLM fallback
           }
         );
         const answer = response.data.choices?.[0]?.message?.content?.trim();
@@ -271,7 +271,7 @@ When answering:
               "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
               "Content-Type": "application/json"
             },
-            timeout: 4000 // 4 seconds timeout for LLM fallback
+            timeout: 8000 // 8 seconds timeout for LLM fallback
           }
         );
         const answer = response.data.choices?.[0]?.message?.content?.trim();
@@ -305,7 +305,7 @@ When answering:
             'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json'
           },
-          timeout: 4000 // 4 seconds timeout for LLM fallback
+          timeout: 8000 // 8 seconds timeout for LLM fallback
         }
       );
       const answer = response.data.choices?.[0]?.message?.content?.trim();

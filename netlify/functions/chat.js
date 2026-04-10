@@ -109,7 +109,7 @@ exports.handler = async function (event, context) {
               { role: "user", content: userMessage }
             ]
           }),
-          signal: AbortSignal.timeout(6000)
+          signal: AbortSignal.timeout(8000)
         });
         if (!llmRes.ok) {
           const errorText = await llmRes.text();
@@ -205,7 +205,7 @@ exports.handler = async function (event, context) {
               { role: "user", content: userMessage }
             ]
           }),
-          signal: AbortSignal.timeout(6000)
+          signal: AbortSignal.timeout(8000)
         });
         if (!llmRes.ok) {
           const errorText = await llmRes.text();

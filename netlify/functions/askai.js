@@ -73,7 +73,7 @@ async function queryRagServer(userMessage) {
     const ragResponse = await axios.post(
       ragUrl,
       { question: userMessage },
-      { timeout: 4000 } // keep RAG call short to fit Netlify's 10s limit
+      { timeout: 5000 } // 5 seconds for RAG retrieval when up
     );
     return ragResponse.data;
   } catch (error) {
@@ -110,7 +110,7 @@ async function queryLlmWithContext(userMessage, context) {
           "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json"
         },
-        timeout: 6000
+        timeout: 4000
       }
     );
     const answer = response.data.choices?.[0]?.message?.content?.trim();
@@ -162,7 +162,7 @@ async function queryLlmFallback(userMessage) {
           "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json"
         },
-        timeout: 3000
+        timeout: 8000
       }
     );
     const answer = response.data.choices?.[0]?.message?.content?.trim();

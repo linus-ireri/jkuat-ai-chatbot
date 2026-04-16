@@ -1,4 +1,4 @@
-# 🚀 Lino.AI Netlify Deployment Guide
+# 🚀 Veritas AI Netlify Deployment Guide
 
 Complete guide to deploy your Lino.AI chatbot on Netlify with a custom domain.
 
@@ -19,7 +19,7 @@ Complete guide to deploy your Lino.AI chatbot on Netlify with a custom domain.
 
 2. **Project Structure**
    ```
-   citizenai/
+   Veritas/
      ├── public/
      │   ├── index.html
      │   ├── style.css
@@ -128,4 +128,4 @@ Your Lino.AI chatbot is now deployed with:
 
 ---
 
-**Built by Ireri Linus Mugendi for citizanai** 🤖
+**Built by Ireri Linus Mugendi for Veritas AI** 🤖

@@ -31,7 +31,7 @@ async function main() {
 
   // 🧠 Strict, structured prompt to prevent hallucination
   const prompt = `
-You are VeritasRAG.AI, the official AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your job is to answer the user's question *strictly and only* based on the provided context about JKUAT.
+You are VeritasRAG.AI, the official AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your job is to answer the user's question *strictly and only* based on the provided context about JKUAT. If answer is found in the context, respond to what the user is asking. Be polite as well.
 
 If the answer cannot be found exactly in the context, respond with:
 "I don't have that information in my knowledge base. Please contact JKUAT's official channels for assistance."
@@ -64,7 +64,7 @@ Answer:
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "google/gemma-4-26b-a4b-it:free",
+        model: "tencent/hy3-preview:free",
         messages: [
           { role: "system", content: "You are VeritasRAG.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Answer questions accurately based only on provided context about JKUAT's courses, academic programs, campus information, and university operations." },
          

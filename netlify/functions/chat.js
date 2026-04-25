@@ -73,7 +73,7 @@ async function openRouterLlmWithRuleContext(userMessage, apiKey) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemma-4-26b-a4b-it:free",
+      model: "tencent/hy3-preview:free",
       messages: [
         { role: "system", content: systemContent },
         {

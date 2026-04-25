@@ -76,7 +76,7 @@ app.post('/rag', async (req, res) => {
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         {
-          model: "google/gemma-4-26b-a4b-it:free",
+          model: "tencent/hy3-preview:free",
           messages
         },
         {
@@ -134,7 +134,7 @@ app.post('/ask', async (req, res) => {
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
 
-        { model: "google/gemma-4-26b-a4b-it:free", messages },
+        { model: "tencent/hy3-preview:free", messages },
         {
           headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
           timeout: 20000

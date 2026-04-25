@@ -76,7 +76,7 @@ app.post('/rag', async (req, res) => {
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         {
-          model: "tencent/hy3-preview:free",
+          model: "nvidia/nemotron-3-nano-30b-a3b:free",
           messages
         },
         {
@@ -134,7 +134,7 @@ app.post('/ask', async (req, res) => {
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
 
-        { model: "tencent/hy3-preview:free", messages },
+        { model: "nvidia/nemotron-3-nano-30b-a3b:free", messages },
         {
           headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
           timeout: 20000

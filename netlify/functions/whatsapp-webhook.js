@@ -149,7 +149,7 @@ async function processMessage(message, from) {
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
           {
-            model: "tencent/hy3-preview:free",
+            model: "nvidia/nemotron-3-nano-30b-a3b:free",
             messages,
             max_tokens: 150,
             temperature: 0.7
@@ -213,7 +213,7 @@ async function processMessage(message, from) {
         ];
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
-          { model: "tencent/hy3-preview:free", messages },
+          { model: "nvidia/nemotron-3-nano-30b-a3b:free", messages },
           {
             headers: {
               'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -249,7 +249,7 @@ async function processMessage(message, from) {
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
           {
-            model: "tencent/hy3-preview:free",
+            model: "nvidia/nemotron-3-nano-30b-a3b:free",
             messages
           },
           {
@@ -288,7 +288,7 @@ async function processMessage(message, from) {
       ];
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
-        { model: "tencent/hy3-preview:free", messages },
+        { model: "nvidia/nemotron-3-nano-30b-a3b:free", messages },
         {
           headers: {
             'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,

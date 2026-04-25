@@ -64,7 +64,7 @@ Answer:
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "arcee-ai/trinity-large-preview:free",
+        model: "google/gemma-4-26b-a4b-it:free",
         messages: [
           { role: "system", content: "You are VeritasRAG.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Answer questions accurately based only on provided context about JKUAT's courses, academic programs, campus information, and university operations." },
          

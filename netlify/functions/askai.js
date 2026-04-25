@@ -141,7 +141,7 @@ async function queryLlmWithContext(userMessage, context) {
   try {
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
-      { model: "arcee-ai/trinity-large-preview:free", messages },
+      { model: "google/gemma-4-26b-a4b-it:free", messages },
       {
         headers: {
           "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
@@ -199,7 +199,7 @@ async function queryLlmFallback(userMessage) {
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "arcee-ai/trinity-large-preview:free",
+        model: "google/gemma-4-26b-a4b-it:free",
         messages
       },
       {

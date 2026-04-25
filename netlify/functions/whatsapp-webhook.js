@@ -149,7 +149,7 @@ async function processMessage(message, from) {
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
           {
-            model: "arcee-ai/trinity-large-preview:free",
+            model: "google/gemma-4-26b-a4b-it:free",
             messages,
             max_tokens: 150,
             temperature: 0.7
@@ -213,7 +213,7 @@ async function processMessage(message, from) {
         ];
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
-          { model: "arcee-ai/trinity-large-preview:free", messages },
+          { model: "google/gemma-4-26b-a4b-it:free", messages },
           {
             headers: {
               'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -249,7 +249,7 @@ async function processMessage(message, from) {
         const response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
           {
-            model: "arcee-ai/trinity-large-preview:free",
+            model: "google/gemma-4-26b-a4b-it:free",
             messages
           },
           {
@@ -288,7 +288,7 @@ async function processMessage(message, from) {
       ];
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
-        { model: "arcee-ai/trinity-large-preview:free", messages },
+        { model: "google/gemma-4-26b-a4b-it:free", messages },
         {
           headers: {
             'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,

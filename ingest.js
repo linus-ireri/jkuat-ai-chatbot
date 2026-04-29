@@ -21,6 +21,7 @@ const urls = [
 const VECTOR_STORE_PATH = "./vector_store";
 
 
+
 // 🧠 LOADERS
 async function loadPDFs() {
   console.log("📄 Loading PDFs...");

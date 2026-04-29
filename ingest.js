@@ -12,7 +12,9 @@ import path from "path";
 // ===============================
 const pdfPaths = [
   "./docs/MCS_timetable (1).pdf",
+  "./docs/imfuyo_rag_document.pdf",
 ];
+
 
 const urls = [
   "https://jkuat-ai.netlify.app/"

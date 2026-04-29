@@ -33,6 +33,7 @@ function getCannedReply(userMessage) {
   return null;
 }
 
+
 /** Structured snippets for the LLM when RAG is unavailable (not used as final canned text). */
 function buildRuleBasedContextBlock() {
   const greetingLines = Object.entries(greetingResponses).map(

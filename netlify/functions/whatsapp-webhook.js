@@ -15,6 +15,7 @@ const greetingResponses = {
 
 
 
+
 // Common JKUAT queries - basic info only, detailed answers come from RAG
 const commonQueries = {
   "what do you do": "I assist with questions about JKUAT, including courses, academic programs, campus directions, learning hours, admissions, and student services.",

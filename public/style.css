@@ -831,6 +831,35 @@ footer {
     left: 1rem;
   }
 
+  .header-flex {
+    padding: 0 1rem;
+    /* Keep title centered on mobile */
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    position: relative;
+  }
+
+  .company-logo {
+    height: 65px;
+    width: auto;
+    order: 0;
+    margin: 0;
+  }
+
+  .header-title {
+    font-size: 1.3rem;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    font-weight: 600;
+    /* Reset order for mobile */
+    order: 2;
+    margin-left: 0;
+    flex: 1 1 100%;
+    text-align: center;
+    min-width: 0;
+  }
+
   .sidebar-close {
     display: block;
     /* Better touch target */
@@ -915,21 +944,6 @@ footer {
     font-size: 0.9rem;
     /* Better mobile text rendering */
     -webkit-font-smoothing: antialiased;
-  }
-
-  .header-flex {
-    padding: 0 1rem;
-    /* Keep title centered on mobile */
-    justify-content: center;
-  }
-
-  .header-title {
-    font-size: 1.3rem;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    font-weight: 600;
-    /* Reset order for mobile */
-    order: 0;
-    margin-left: 0;
   }
 
   .input-container {

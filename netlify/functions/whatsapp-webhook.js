@@ -181,6 +181,7 @@ async function processMessage(message, from) {
     return greetingResponses[normalizedMessage];
   }
 
+  
   // If RAG is healthy, proceed with RAG
   try{
     const RAG_SERVER_URL = process.env.RAG_SERVER_URL;

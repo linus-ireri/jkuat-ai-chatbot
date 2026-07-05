@@ -99,6 +99,7 @@ app.post('/rag', async (req, res) => {
   }
 });
 
+
 // Provide a compatible /ask endpoint expected by Netlify functions
 app.post('/ask', async (req, res) => {
   const question = req.body.question;

@@ -7,12 +7,12 @@ import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddin
 import fs from "fs";
 import path from "path";
 
-// ===============================
-// 📁 SOURCE FILES & CONFIG
-// ===============================
+
+// SOURCE FILES & CONFIG
+
 const pdfPaths = [
   "./docs/MCS_timetable (1).pdf",
-  "./docs/imfuyo_rag_document.pdf",
+  "./docs/JKUAT_Information_Guide.pdf"
 ];
 
 
@@ -24,7 +24,7 @@ const VECTOR_STORE_PATH = "./vector_store";
 
 
 
-// 🧠 LOADERS
+//  LOADERS
 async function loadPDFs() {
   console.log("📄 Loading PDFs...");
   const docs = [];
@@ -32,7 +32,7 @@ async function loadPDFs() {
   for (const pdfPath of pdfPaths) {
     try {
       if (!fs.existsSync(pdfPath)) {
-        console.warn(`⚠️  Skipping missing file: ${pdfPath}`);
+        console.warn(`  Skipping missing file: ${pdfPath}`);
         continue;
       }
 
@@ -94,9 +94,8 @@ async function loadURLs() {
   return docs;
 }
 
-// ===============================
-// 🧩 MAIN INGESTION PIPELINE
-// ===============================
+//  MAIN INGESTION PIPELINE
+
 async function main() {
   console.log("🚀 Starting RAG ingestion pipeline...\n");
 

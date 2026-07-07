@@ -196,6 +196,7 @@ async function processMessage(message, from) {
             }),
             timeout: 8000 // 8 seconds timeout for LLM fallback
           }
+          
         );
         const answer = response?.choices?.[0]?.message?.content?.trim();
         console.log("LLM response received, length:", answer?.length || 0);

@@ -199,7 +199,6 @@ async function processMessage(message, from) {
         );
         const answer = response?.choices?.[0]?.message?.content?.trim();
         console.log("LLM response received, length:", answer?.length || 0);
-        console.log("Full response data:", JSON.stringify(response.data, null, 2));
         return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
       } catch (llmError) {
         console.error("Fallback LLM error:", llmError.response?.status, llmError.response?.data || llmError.message);
@@ -287,21 +286,22 @@ async function processMessage(message, from) {
         { role: "user", content: message }
       ];
       try {
-        const response = await axios.post(
+        const response = await fetchWithTimeout(
           "https://openrouter.ai/api/v1/chat/completions",
           {
-            model: "nvidia/nemotron-3-nano-30b-a3b:free",
-            messages
-          },
-          {
+            method: "POST",
             headers: {
               "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
               "Content-Type": "application/json"
             },
+            body: JSON.stringify({
+              model: "nvidia/nemotron-3-nano-30b-a3b:free",
+              messages
+            }),
             timeout: 8000 // 8 seconds timeout for LLM fallback
           }
         );
-        const answer = response.data.choices?.[0]?.message?.content?.trim();
+        const answer = response?.choices?.[0]?.message?.content?.trim();
         return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
       } catch (llmError) {
         console.error("Error in LLM request:", llmError.response?.status, llmError.response?.data || llmError.message);

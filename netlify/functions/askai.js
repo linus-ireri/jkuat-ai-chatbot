@@ -1,12 +1,7 @@
 import axios from "axios";
 
-// --- Environment Variable Check ---
-if (!process.env.OPENROUTER_API_KEY) {
-  throw new Error("OPENROUTER_API_KEY is not configured. Please check your environment variables.");
-}
-
 // --- Constants ---
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const GREETING_RESPONSES = {
   "who are you": "I am Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",
   "hello": "Hello! Welcome to Veritas.AI. Ask me about JKUAT courses, campus directions, learning hours, academic programs, admissions, or student services.",
@@ -126,6 +121,18 @@ async function queryRagServer(userMessage) {
  * @returns {Promise<object>} The LLM's response.
  */
 async function queryLlmWithContext(userMessage, context) {
+  if (!OPENROUTER_API_KEY) {
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reply: "The AI service is not configured yet. I can still help with general JKUAT greetings and basic questions, but full AI responses are currently unavailable.",
+        context: context,
+        source: "config-missing"
+      }),
+    };
+  }
+
   const systemPrompt = SYSTEM_PROMPT + `\nGuidelines:\n1. Base answers ONLY on the retrieved context provided.\n2. Cite specific documents or sources from the context when referenced.\n
   3. If the context lacks relevant information, say "I don't have enough information about that in my knowledge base. Please contact JKUAT's official enquiries for detailed assistance."\n
   4. For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?"\n
@@ -181,6 +188,18 @@ async function queryLlmWithContext(userMessage, context) {
  * @returns {Promise<object>} The LLM's response.
  */
 async function queryLlmFallback(userMessage) {
+  if (!OPENROUTER_API_KEY) {
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reply: "The AI service is not configured yet. I can still help with basic JKUAT greetings and common questions, but full AI responses are temporarily unavailable.",
+        context: [],
+        source: "config-missing"
+      }),
+    };
+  }
+
   const ruleContext = buildRuleBasedContextBlock();
   const systemPrompt =
     SYSTEM_PROMPT +

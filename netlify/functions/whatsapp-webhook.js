@@ -1,4 +1,4 @@
-const axios = require('axios');
+import axios from 'axios';
 
 // Temporary deployment marker for WhatsApp webhook testing.
 const greetingResponses = {
@@ -31,7 +31,7 @@ const linoAIResponses = {
   ...commonQueries
 };
 
-exports.handler = async function(event, context) {
+export const handler = async function(event, context) {
   // Webhook verification (GET request from Meta)
   if (event.httpMethod === "GET") {
     const params = event.queryStringParameters;

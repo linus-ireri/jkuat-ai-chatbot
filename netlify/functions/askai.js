@@ -1,7 +1,40 @@
-import axios from "axios";
-
 // --- Constants ---
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
+
+async function fetchWithTimeout(url, { method = "GET", headers = {}, body, timeout = 8000 } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body,
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+
+    if (!response.ok) {
+      const error = new Error(`HTTP ${response.status}`);
+      error.status = response.status;
+      error.responseText = text;
+      throw error;
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const GREETING_RESPONSES = {
   "who are you": "I am Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",
   "hello": "Hello! Welcome to Veritas.AI. Ask me about JKUAT courses, campus directions, learning hours, academic programs, admissions, or student services.",
@@ -102,12 +135,12 @@ async function queryRagServer(userMessage) {
       return null;
     }
     console.log("Querying RAG server at:", ragUrl);
-    const ragResponse = await axios.post(
-      ragUrl,
-      { question: userMessage },
-      { timeout: 5000 } // 5 seconds for RAG retrieval when up
-    );
-    return ragResponse.data;
+    return await fetchWithTimeout(ragUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: userMessage }),
+      timeout: 5000,
+    });
   } catch (error) {
     console.error("RAG server error:", error.message);
     return null;
@@ -146,18 +179,19 @@ async function queryLlmWithContext(userMessage, context) {
   ];
 
   try {
-    const response = await axios.post(
+    const response = await fetchWithTimeout(
       "https://openrouter.ai/api/v1/chat/completions",
-      { model: "nvidia/nemotron-3-nano-30b-a3b:free", messages },
       {
+        method: "POST",
         headers: {
           "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json"
         },
+        body: JSON.stringify({ model: "nvidia/nemotron-3-nano-30b-a3b:free", messages }),
         timeout: 4000
       }
     );
-    const answer = response.data.choices?.[0]?.message?.content?.trim();
+    const answer = response?.choices?.[0]?.message?.content?.trim();
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -215,21 +249,22 @@ async function queryLlmFallback(userMessage) {
 
   try {
     console.log("Making LLM fallback call for:", userMessage.substring(0, 100) + "...");
-    const response = await axios.post(
+    const response = await fetchWithTimeout(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "nvidia/nemotron-3-nano-30b-a3b:free",
-        messages
-      },
-      {
+        method: "POST",
         headers: {
           "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json"
         },
+        body: JSON.stringify({
+          model: "nvidia/nemotron-3-nano-30b-a3b:free",
+          messages
+        }),
         timeout: 8000
       }
     );
-    const answer = response.data.choices?.[0]?.message?.content?.trim();
+    const answer = response?.choices?.[0]?.message?.content?.trim();
     console.log("LLM fallback response received, length:", answer?.length || 0);
     return {
       statusCode: 200,
@@ -281,7 +316,7 @@ export const handler = async function (event, context) {
     const base = ragBaseUrl();
     try {
       if (base) {
-        await axios.get(`${base}/health`, { timeout: 1000 });
+        await fetchWithTimeout(`${base}/health`, { timeout: 1000 });
         ragIsHealthy = true;
         console.log("RAG server is healthy");
       } else {

@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 // Temporary deployment marker for WhatsApp webhook testing.
 const greetingResponses = {
   "who are you": "I am Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",
@@ -25,11 +23,45 @@ const commonQueries = {
   "help": "I can help you with JKUAT questions. Ask about our courses, academic programs, campus directions, learning hours, or student services."
 };
 
-// Lino AI canned responses (fallback / cached QA). If you have a separate
 // source for JKUAT-specific Q&A, load or replace this object accordingly.
 const linoAIResponses = {
   ...commonQueries
 };
+
+async function fetchWithTimeout(url, { method = 'GET', headers = {}, body, timeout = 8000 } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body,
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+
+    if (!response.ok) {
+      const error = new Error(`HTTP ${response.status}`);
+      error.status = response.status;
+      error.responseText = text;
+      throw error;
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export const handler = async function(event, context) {
   // Webhook verification (GET request from Meta)
@@ -119,7 +151,7 @@ async function processMessage(message, from) {
   const ragBase = ragBaseUrl();
   try {
     if (ragBase) {
-      await axios.get(`${ragBase}/health`, { timeout: 1000 });
+      await fetchWithTimeout(`${ragBase}/health`, { timeout: 1000 });
       ragIsHealthy = true;
       console.log("RAG server is healthy");
     } else {
@@ -148,23 +180,24 @@ async function processMessage(message, from) {
       ];
       try {
         console.log("Making LLM fallback call for message:", message.substring(0, 100) + "...");
-        const response = await axios.post(
+        const response = await fetchWithTimeout(
           "https://openrouter.ai/api/v1/chat/completions",
           {
-            model: "nvidia/nemotron-3-nano-30b-a3b:free",
-            messages,
-            max_tokens: 150,
-            temperature: 0.7
-          },
-          {
+            method: "POST",
             headers: {
               "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
               "Content-Type": "application/json"
             },
+            body: JSON.stringify({
+              model: "nvidia/nemotron-3-nano-30b-a3b:free",
+              messages,
+              max_tokens: 150,
+              temperature: 0.7
+            }),
             timeout: 8000 // 8 seconds timeout for LLM fallback
           }
         );
-        const answer = response.data.choices?.[0]?.message?.content?.trim();
+        const answer = response?.choices?.[0]?.message?.content?.trim();
         console.log("LLM response received, length:", answer?.length || 0);
         console.log("Full response data:", JSON.stringify(response.data, null, 2));
         return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
@@ -189,19 +222,23 @@ async function processMessage(message, from) {
     if (!RAG_SERVER_URL) {
       throw new Error("RAG_SERVER_URL not set in environment");
     }
-    const ragResponse = await axios.post(
+    const ragResponse = await fetchWithTimeout(
       `${RAG_SERVER_URL}/rag`,
-      { question: message },
-      { timeout: 5000 } // 5 seconds timeout for RAG retrieval when up
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: message }),
+        timeout: 5000 // 5 seconds timeout for RAG retrieval when up
+      }
     );
 
     // If answer is present, return it
-    if (ragResponse.data && ragResponse.data.answer) {
-      return ragResponse.data.answer;
+    if (ragResponse && ragResponse.answer) {
+      return ragResponse.answer;
     }
 
     // If no answer, but context exists, use it in LLM fallback
-    const retrievedContext = ragResponse.data && ragResponse.data.context;
+    const retrievedContext = ragResponse && ragResponse.context;
     if (retrievedContext) {
       // --- LLM must answer ONLY from retrieved RAG context ---
       try {
@@ -214,18 +251,19 @@ async function processMessage(message, from) {
           { role: "user", content: `Retrieved context: ${Array.isArray(retrievedContext) ? retrievedContext.join(" ") : retrievedContext}` },
           { role: "user", content: message }
         ];
-        const response = await axios.post(
+        const response = await fetchWithTimeout(
           "https://openrouter.ai/api/v1/chat/completions",
-          { model: "nvidia/nemotron-3-nano-30b-a3b:free", messages },
           {
+            method: "POST",
             headers: {
               'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
               'Content-Type': 'application/json'
             },
+            body: JSON.stringify({ model: "nvidia/nemotron-3-nano-30b-a3b:free", messages }),
             timeout: 8000 // 8 seconds timeout for LLM fallback
           }
         );
-        const answer = response.data.choices?.[0]?.message?.content?.trim();
+        const answer = response?.choices?.[0]?.message?.content?.trim();
         return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
       } catch (llmError) {
         console.error("Error in LLM request:", llmError);
@@ -289,18 +327,19 @@ async function processMessage(message, from) {
         { role: "system", content: systemPrompt },
         { role: "user", content: message }
       ];
-      const response = await axios.post(
+      const response = await fetchWithTimeout(
         "https://openrouter.ai/api/v1/chat/completions",
-        { model: "nvidia/nemotron-3-nano-30b-a3b:free", messages },
         {
+          method: "POST",
           headers: {
             'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json'
           },
+          body: JSON.stringify({ model: "nvidia/nemotron-3-nano-30b-a3b:free", messages }),
           timeout: 8000 // 8 seconds timeout for LLM fallback
         }
       );
-      const answer = response.data.choices?.[0]?.message?.content?.trim();
+      const answer = response?.choices?.[0]?.message?.content?.trim();
       return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
     } catch (llmError) {
       console.error("Error in LLM fallback:", llmError);
@@ -363,23 +402,25 @@ async function sendWhatsAppMessage(to, message) {
       return;
     }
 
-    const response = await axios.post(
+    const response = await fetchWithTimeout(
       `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
       {
-        messaging_product: "whatsapp",
-        to: to,
-        type: "text",
-        text: { body: message }
-      },
-      {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: to,
+          type: "text",
+          text: { body: message }
+        }),
+        timeout: 15000
       }
     );
 
-    console.log("WhatsApp message sent:", response.data);
+    console.log("WhatsApp message sent:", response);
   } catch (error) {
     console.error("Error sending WhatsApp message:", error);
   }

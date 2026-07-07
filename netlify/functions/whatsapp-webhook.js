@@ -191,13 +191,13 @@ async function processMessage(message, from) {
             body: JSON.stringify({
               model: "nvidia/nemotron-3-nano-30b-a3b:free",
               messages,
-              max_tokens: 150,
+              max_tokens: 500,
               temperature: 0.7
             }),
             timeout: 8000 // 8 seconds timeout for LLM fallback
           }
           
-          
+
         );
         const answer = response?.choices?.[0]?.message?.content?.trim();
         console.log("LLM response received, length:", answer?.length || 0);

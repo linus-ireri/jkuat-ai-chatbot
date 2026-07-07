@@ -1,5 +1,6 @@
 const axios = require('axios');
 
+// Temporary deployment marker for WhatsApp webhook testing.
 const greetingResponses = {
   "who are you": "I am Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",
   "who are you?": "I am veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",

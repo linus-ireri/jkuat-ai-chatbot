@@ -49,7 +49,7 @@ node rag-server.js
 
 ### Environment Variables
 - `RAG_SERVER_URL` (for RAG)
-- `OPENROUTER_API_KEY` (for AI model)
+- `GROQ_API_KEY` (required; set to your Groq API key)
 - `WHATSAPP_VERIFY_TOKEN` (for WhatsApp webhook)
 
 ## Security & Best Practices

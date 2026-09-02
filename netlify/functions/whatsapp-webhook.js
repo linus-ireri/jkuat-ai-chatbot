@@ -1,4 +1,10 @@
 // Temporary deployment marker for WhatsApp webhook testing.
+import { cleanLlmAnswer } from "../../lib/clean-llm-answer.js";
+
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = "qwen/qwen3.6-27b";
+
 const greetingResponses = {
   "who are you": "I am Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",
   "who are you?": "I am veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",
@@ -165,8 +171,8 @@ async function processMessage(message, from) {
   if (!ragIsHealthy) {
     console.log("Using fallback mode without RAG (LLM + greeting/common reference context)");
     try {
-      if (!process.env.OPENROUTER_API_KEY) {
-        throw new Error("OPENROUTER_API_KEY not set in environment");
+      if (!GROQ_API_KEY) {
+        throw new Error("GROQ_API_KEY not set in environment");
       }
       const ruleContext = buildRuleBasedContextBlock();
       const systemPrompt = `You are Veritas.AI, the official AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Document RAG is offline: use the reference snippets in the next message when they match the user's intent; for other JKUAT topics use general knowledge. Be concise and professional. For non-JKUAT questions, redirect politely to JKUAT topics.`;
@@ -181,15 +187,15 @@ async function processMessage(message, from) {
       try {
         console.log("Making LLM fallback call for message:", message.substring(0, 100) + "...");
         const response = await fetchWithTimeout(
-          "https://openrouter.ai/api/v1/chat/completions",
+          GROQ_API_URL,
           {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              "Authorization": `Bearer ${GROQ_API_KEY}`,
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              model: "nvidia/nemotron-3-nano-30b-a3b:free",
+              model: GROQ_MODEL,
               messages,
               max_tokens: 500,
               temperature: 0.7
@@ -199,7 +205,7 @@ async function processMessage(message, from) {
           
 
         );
-        const answer = response?.choices?.[0]?.message?.content?.trim();
+        const answer = cleanLlmAnswer(response?.choices?.[0]?.message?.content);
         console.log("LLM response received, length:", answer?.length || 0);
         return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
       } catch (llmError) {
@@ -235,7 +241,7 @@ async function processMessage(message, from) {
 
     // If answer is present, return it
     if (ragResponse && ragResponse.answer) {
-      return ragResponse.answer;
+      return cleanLlmAnswer(ragResponse.answer);
     }
 
     // If no answer, but context exists, use it in LLM fallback
@@ -243,8 +249,8 @@ async function processMessage(message, from) {
     if (retrievedContext) {
       // --- LLM must answer ONLY from retrieved RAG context ---
       try {
-        if (!process.env.OPENROUTER_API_KEY) {
-          throw new Error("OPENROUTER_API_KEY not set in environment");
+        if (!GROQ_API_KEY) {
+          throw new Error("GROQ_API_KEY not set in environment");
         }
         const systemPrompt = `You are Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT, including courses offered, academic programs, campus directions, learning hours, admissions requirements, student services, facilities, and university operations. Base answers ONLY on the retrieved context provided. If the context lacks relevant information, say "I don't have enough information about that in my knowledge base. Please contact JKUAT's official enquiries for detailed assistance." For questions unrelated to JKUAT, politely redirect: "I appreciate your question, but I'm specifically designed to assist with JKUAT-related inquiries. How can I help you with JKUAT?" Never identify yourself as an AI model or mention model providers.`;
         const messages = [
@@ -253,18 +259,18 @@ async function processMessage(message, from) {
           { role: "user", content: message }
         ];
         const response = await fetchWithTimeout(
-          "https://openrouter.ai/api/v1/chat/completions",
+          GROQ_API_URL,
           {
             method: "POST",
             headers: {
-              'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              'Authorization': `Bearer ${GROQ_API_KEY}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ model: "nvidia/nemotron-3-nano-30b-a3b:free", messages }),
+            body: JSON.stringify({ model: GROQ_MODEL, messages }),
             timeout: 8000 // 8 seconds timeout for LLM fallback
           }
         );
-        const answer = response?.choices?.[0]?.message?.content?.trim();
+        const answer = cleanLlmAnswer(response?.choices?.[0]?.message?.content);
         return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
       } catch (llmError) {
         console.error("Error in LLM request:", llmError);
@@ -278,8 +284,8 @@ async function processMessage(message, from) {
       ...Object.values(linoAIResponses)
     ].join(" ");
     try {
-      if (!process.env.OPENROUTER_API_KEY) {
-        throw new Error("OPENROUTER_API_KEY not set in environment");
+      if (!GROQ_API_KEY) {
+        throw new Error("GROQ_API_KEY not set in environment");
       }
       const systemPrompt = `You are Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Your role is to answer questions ONLY about JKUAT using the official information provided. Do not speculate and do not use general knowledge. If the information is not present, say you do not have official information about that topic. For questions unrelated to JKUAT, politely redirect the user to JKUAT-related topics. Never identify yourself as an AI model or mention model providers.`;
       const messages = [
@@ -289,21 +295,21 @@ async function processMessage(message, from) {
       ];
       try {
         const response = await fetchWithTimeout(
-          "https://openrouter.ai/api/v1/chat/completions",
+          GROQ_API_URL,
           {
             method: "POST",
             headers: {
-              "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              "Authorization": `Bearer ${GROQ_API_KEY}`,
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              model: "nvidia/nemotron-3-nano-30b-a3b:free",
+              model: GROQ_MODEL,
               messages
             }),
             timeout: 8000 // 8 seconds timeout for LLM fallback
           }
         );
-        const answer = response?.choices?.[0]?.message?.content?.trim();
+        const answer = cleanLlmAnswer(response?.choices?.[0]?.message?.content);
         return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
       } catch (llmError) {
         console.error("Error in LLM request:", llmError.response?.status, llmError.response?.data || llmError.message);
@@ -317,8 +323,8 @@ async function processMessage(message, from) {
     console.error("Error in RAG request:", error);
     // If RAG fails, proceed with LLM fallback using greetings and common query context
     try {
-      if (!process.env.OPENROUTER_API_KEY) {
-        throw new Error("OPENROUTER_API_KEY not set in environment");
+      if (!GROQ_API_KEY) {
+        throw new Error("GROQ_API_KEY not set in environment");
       }
       const allFaqs = [
         ...Object.values(greetingResponses),
@@ -330,18 +336,18 @@ async function processMessage(message, from) {
         { role: "user", content: message }
       ];
       const response = await fetchWithTimeout(
-        "https://openrouter.ai/api/v1/chat/completions",
+        GROQ_API_URL,
         {
           method: "POST",
           headers: {
-            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Authorization': `Bearer ${GROQ_API_KEY}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ model: "nvidia/nemotron-3-nano-30b-a3b:free", messages }),
+          body: JSON.stringify({ model: GROQ_MODEL, messages }),
           timeout: 8000 // 8 seconds timeout for LLM fallback
         }
       );
-      const answer = response?.choices?.[0]?.message?.content?.trim();
+      const answer = cleanLlmAnswer(response?.choices?.[0]?.message?.content);
       return answer || "I'm experiencing high traffic right now and can't answer this question at the moment. Please try again in a few minutes!";
     } catch (llmError) {
       console.error("Error in LLM fallback:", llmError);

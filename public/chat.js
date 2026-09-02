@@ -161,8 +161,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function getErrorMessage(error) {
     if (error.message.includes("API configuration error")) {
       return "API configuration error. Please check the server setup.";
-    } else if (error.message.includes("OpenRouter API error")) {
-      return "OpenRouter API error. Please check your API key.";
+    } else if (error.message.includes("OpenRouter API error") || error.message.includes("LLM provider error") || error.message.includes("LLM HTTP error")) {
+      return "AI provider error. Please check your Groq API key (GROQ_API_KEY).";
     } else if (error.message.includes("429") || error.message.includes("Max retries reached")) {
       return "Too many requests. Please wait a moment and try again.";
     }

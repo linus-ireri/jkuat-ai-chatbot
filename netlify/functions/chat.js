@@ -1,3 +1,5 @@
+import { cleanLlmAnswer } from "../../lib/clean-llm-answer.js";
+
 const greetingResponses = {
   "who are you": "I am Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",
   "hello": "Hello! Welcome to Veritas.AI. Ask me about JKUAT courses, academic programs, campus directions, learning hours, admissions, or student services.",
@@ -64,17 +66,22 @@ function ragBaseAndAsk() {
   return { base: trimmed, askUrl: `${trimmed}/ask` };
 }
 
-async function openRouterLlmWithRuleContext(userMessage, apiKey) {
+async function llmWithRuleContext(userMessage) {
   const ruleContext = buildRuleBasedContextBlock();
   const systemContent = `You are Veritas, the official JKUAT.AI assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Answer questions about JKUAT courses, programs, campus, admissions, and services. Be concise and professional. Document RAG is offline: use the reference snippets in the next message when they match the user's intent; for other JKUAT topics use general knowledge; for non-JKUAT topics, politely redirect.`;
-  const llmRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) throw new Error('Missing GROQ_API_KEY');
+  const apiUrl = "https://api.groq.com/openai/v1/chat/completions";
+  const model = "qwen/qwen3.6-27b";
+
+  const llmRes = await fetch(apiUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${groqKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "nvidia/nemotron-3-nano-30b-a3b:free",
+      model,
       messages: [
         { role: "system", content: systemContent },
         {
@@ -87,7 +94,7 @@ async function openRouterLlmWithRuleContext(userMessage, apiKey) {
   });
   if (!llmRes.ok) {
     const errorText = await llmRes.text();
-    console.error(`LLM fallback HTTP error ${llmRes.status}:`, errorText);
+    console.error(`LLM HTTP error ${llmRes.status}:`, errorText);
     return {
       reply:
         "I'm currently unable to answer because the AI service is temporarily unavailable. Please try again shortly.",
@@ -95,9 +102,7 @@ async function openRouterLlmWithRuleContext(userMessage, apiKey) {
     };
   }
   const llmData = await llmRes.json();
-  const answer =
-    llmData?.choices?.[0]?.message?.content?.trim() ||
-    "Sorry, I do not have official information on that topic.";
+  const answer = cleanLlmAnswer(llmData?.choices?.[0]?.message?.content) || "Sorry, I do not have official information on that topic.";
   return { reply: answer, source: "llm-fallback" };
 }
 
@@ -153,12 +158,8 @@ export const handler = async function (event, context) {
     if (!ragIsHealthy) {
       console.log("RAG server not available, using LLM with rule-based reference context");
       try {
-        const apiKey = process.env.OPENROUTER_API_KEY;
-        if (!apiKey) {
-          throw new Error("Missing OPENROUTER_API_KEY");
-        }
         console.log("Making LLM call with rule context for:", userMessage.substring(0, 100) + "...");
-        const { reply, source } = await openRouterLlmWithRuleContext(userMessage, apiKey);
+        const { reply, source } = await llmWithRuleContext(userMessage);
         return {
           statusCode: 200,
           headers: jsonHeaders,
@@ -212,11 +213,7 @@ export const handler = async function (event, context) {
     if (!response || !response.ok) {
       console.error("RAG server request failed, falling back to LLM with rule-based context");
       try {
-        const apiKey = process.env.OPENROUTER_API_KEY;
-        if (!apiKey) {
-          throw new Error("Missing OPENROUTER_API_KEY");
-        }
-        const { reply, source } = await openRouterLlmWithRuleContext(userMessage, apiKey);
+        const { reply, source } = await llmWithRuleContext(userMessage);
         return {
           statusCode: 200,
           headers: jsonHeaders,
@@ -252,7 +249,7 @@ export const handler = async function (event, context) {
     const data = await response.json();
     console.log("RAG Response:", data);
 
-const cleanedReply = data?.answer?.trim() || "Hello! I'm Veritas, the official JKUAT AI assistant. Ask me about JKUAT courses, campus directions, learning hours, academic programs, admissions, or student services.";
+const cleanedReply = cleanLlmAnswer(data?.answer) || "Hello! I'm Veritas, the official JKUAT AI assistant. Ask me about JKUAT courses, campus directions, learning hours, academic programs, admissions, or student services.";
 
     return {
       statusCode: 200,

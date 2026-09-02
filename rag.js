@@ -3,6 +3,7 @@ import { HNSWLib } from "@langchain/community/vectorstores/hnswlib";
 import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddings/huggingface_transformers";
 import axios from "axios";
 import dotenv from "dotenv";
+import { cleanLlmAnswer } from "./lib/clean-llm-answer.js";
 
 dotenv.config();
 
@@ -53,40 +54,39 @@ User Question: ${question}
 Answer:
 `;
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    console.error("❌ OPENROUTER_API_KEY is not set.");
+    console.error("❌ No LLM API key found. Set GROQ_API_KEY.");
     process.exit(1);
   }
+  const groqModel = "qwen/qwen3.6-27b";
+  const apiUrl = "https://api.groq.com/openai/v1/chat/completions";
 
   try {
     console.log("\n💬 Querying LLM...");
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: "nvidia/nemotron-3-nano-30b-a3b:free",
-        messages: [
-          { role: "system", content: "You are VeritasRAG.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Answer questions accurately based only on provided context about JKUAT's courses, academic programs, campus information, and university operations." },
-         
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.1, // 🔒 ensures factuality with minimal variation
-        max_tokens: 500
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 30000
-      }
-    );
+    const body = {
+      model: groqModel,
+      messages: [
+        { role: "system", content: "You are VeritasRAG.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology (JKUAT). Answer questions accurately based only on provided context about JKUAT's courses, academic programs, campus information, and university operations." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.1, // 🔒 ensures factuality with minimal variation
+      max_tokens: 500
+    };
 
-    const answer = response.data?.choices?.[0]?.message?.content?.trim() || "[No answer returned]";
+    const response = await axios.post(apiUrl, body, {
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      timeout: 30000
+    });
+
+    const answer = cleanLlmAnswer(response.data?.choices?.[0]?.message?.content) || "[No answer returned]";
     console.log("\n----- LLM Answer -----\n");
     console.log(answer);
   } catch (err) {
-    console.error("\n❌ Error calling OpenRouter:");
+    console.error("\n❌ Error calling LLM provider:");
     console.error(err.response?.data || err.message);
   }
 }

@@ -1,5 +1,9 @@
 // --- Constants ---
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
+import { cleanLlmAnswer } from "../../lib/clean-llm-answer.js";
+
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = "qwen/qwen3.6-27b";
 
 async function fetchWithTimeout(url, { method = "GET", headers = {}, body, timeout = 8000 } = {}) {
   const controller = new AbortController();
@@ -154,7 +158,7 @@ async function queryRagServer(userMessage) {
  * @returns {Promise<object>} The LLM's response.
  */
 async function queryLlmWithContext(userMessage, context) {
-  if (!OPENROUTER_API_KEY) {
+  if (!GROQ_API_KEY) {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -179,19 +183,16 @@ async function queryLlmWithContext(userMessage, context) {
   ];
 
   try {
-    const response = await fetchWithTimeout(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ model: "nvidia/nemotron-3-nano-30b-a3b:free", messages }),
-        timeout: 4000
-      }
-    );
-    const answer = response?.choices?.[0]?.message?.content?.trim();
+    const response = await fetchWithTimeout(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ model: GROQ_MODEL, messages }),
+      timeout: 4000
+    });
+    const answer = cleanLlmAnswer(response?.choices?.[0]?.message?.content);
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -222,7 +223,7 @@ async function queryLlmWithContext(userMessage, context) {
  * @returns {Promise<object>} The LLM's response.
  */
 async function queryLlmFallback(userMessage) {
-  if (!OPENROUTER_API_KEY) {
+  if (!GROQ_API_KEY) {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -249,22 +250,16 @@ async function queryLlmFallback(userMessage) {
 
   try {
     console.log("Making LLM fallback call for:", userMessage.substring(0, 100) + "...");
-    const response = await fetchWithTimeout(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "nvidia/nemotron-3-nano-30b-a3b:free",
-          messages
-        }),
-        timeout: 8000
-      }
-    );
-    const answer = response?.choices?.[0]?.message?.content?.trim();
+    const response = await fetchWithTimeout(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ model: GROQ_MODEL, messages }),
+      timeout: 8000
+    });
+    const answer = cleanLlmAnswer(response?.choices?.[0]?.message?.content);
     console.log("LLM fallback response received, length:", answer?.length || 0);
     return {
       statusCode: 200,
@@ -343,7 +338,7 @@ export const handler = async function (event, context) {
         return {
           statusCode: 200,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reply: ragData.answer, context: ragData.context || [], source: "rag" }),
+          body: JSON.stringify({ reply: cleanLlmAnswer(ragData.answer), context: ragData.context || [], source: "rag" }),
         };
       }
       if (ragData.context && Array.isArray(ragData.context) && ragData.context.length > 0) {

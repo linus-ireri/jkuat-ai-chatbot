@@ -114,7 +114,21 @@ header {
   justify-content: space-between;
   max-width: 1400px;
   margin: 0 auto;
-  gap: 2rem; /* Add gap between elements */
+  gap: 1rem;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.header-spacer {
+  display: none;
+  width: 44px;
+  flex-shrink: 0;
 }
 
 .company-logo {
@@ -139,11 +153,11 @@ header {
   font-size: 2.2rem;
   font-weight: 800;
   color: #F87060;
-  margin-left: 1rem;
-  text-shadow: 0 0 10px rgba(248, 112, 96, 0.6); /* Simple glow effect */
-  /* Move to right on desktop */
-  order: 2;
+  text-shadow: 0 0 10px rgba(248, 112, 96, 0.6);
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-title:hover {
@@ -151,22 +165,20 @@ header {
 }
 
 .sidebar-toggle {
-  display: none; /* Hidden by default on desktop */
-  background: none;
-  border: none;
-  font-size: 1.2rem;
+  display: none;
+  background: rgba(248, 112, 96, 0.12);
+  border: 1px solid rgba(248, 112, 96, 0.35);
+  font-size: 1.25rem;
   color: #F87060;
   cursor: pointer;
   padding: 0.75rem;
-  border-radius: 8px;
+  border-radius: 10px;
   transition: all 0.3s ease;
-  /* Better touch target */
   min-width: 44px;
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  /* Keep on left */
-  order: 1;
+  flex-shrink: 0;
 }
 
 .sidebar-toggle:hover {
@@ -268,6 +280,10 @@ header {
   border-radius: 50%;
   transition: all 0.3s ease;
   display: none;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar-close:hover {
@@ -748,6 +764,11 @@ footer {
   }
 }
 
+/* Sidebar backdrop overlay */
+.sidebar-backdrop {
+  display: none;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   body {
@@ -777,6 +798,65 @@ footer {
     min-height: 60px;
   }
 
+  .header-flex {
+    padding: 0;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .header-brand {
+    justify-content: center;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .header-spacer {
+    display: block;
+  }
+
+  .company-logo {
+    height: 48px;
+    width: auto;
+    margin: 0;
+    flex-shrink: 0;
+  }
+
+  .header-title {
+    font-size: 1.1rem;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-toggle {
+    display: flex;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    pointer-events: none;
+  }
+
+  .sidebar-backdrop.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
   .sidebar {
     position: fixed;
     top: 0;
@@ -785,91 +865,29 @@ footer {
     height: 100dvh;
     z-index: 1000;
     transform: translateX(-100%);
-    width: 280px;
+    width: min(85vw, 320px);
     transition: transform 0.3s ease;
     background: rgba(10, 20, 35, 0.98);
     backdrop-filter: blur(20px);
     border-right: 1px solid rgba(248, 112, 96, 0.2);
-    /* Safe area support */
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: none;
   }
 
   .sidebar.open {
     transform: translateX(0);
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
-  }
-
-  /* Sidebar backdrop overlay */
-  .sidebar-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 999;
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.3s ease;
-    /* Ensure it doesn't block touch events on mobile */
-    pointer-events: none;
-  }
-
-  .sidebar-backdrop.open {
-    opacity: 1;
-    visibility: visible;
-    /* Only enable pointer events when open */
-    pointer-events: auto;
-  }
-
-  .sidebar-toggle {
-    display: flex;
-    /* Keep on left for mobile */
-    order: 1;
-    position: absolute;
-    left: 1rem;
-  }
-
-  .header-flex {
-    padding: 0 1rem;
-    /* Keep title centered on mobile */
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-items: center;
-    position: relative;
-  }
-
-  .company-logo {
-    height: 65px;
-    width: auto;
-    order: 0;
-    margin: 0;
-  }
-
-  .header-title {
-    font-size: 1.3rem;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    font-weight: 600;
-    /* Reset order for mobile */
-    order: 2;
-    margin-left: 0;
-    flex: 1 1 100%;
-    text-align: center;
-    min-width: 0;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
   }
 
   .sidebar-close {
-    display: block;
-    /* Better touch target */
-    min-width: 44px;
-    min-height: 44px;
+    display: flex;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .app-container {
     margin: 0;
-    height: 100vh;
     height: 100dvh;
     border-radius: 0;
     display: flex;
@@ -879,10 +897,12 @@ footer {
     left: 0;
     right: 0;
     bottom: 0;
-    /* Safe area support */
     padding-bottom: env(safe-area-inset-bottom);
-    /* Add top padding to account for fixed header */
-    padding-top: 80px; /* Adjust based on header height */
+    padding-top: calc(64px + env(safe-area-inset-top));
+    max-width: none;
+    width: 100%;
+    border: none;
+    box-shadow: none;
   }
 
   .chat-container {
@@ -890,6 +910,7 @@ footer {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    width: 100%;
   }
 
   .chat-body {
@@ -907,20 +928,20 @@ footer {
   }
 
   .chat-box {
-    padding: 1rem;
-    padding-top: 1rem; /* Reduced since header is now fixed */
+    padding: 0.75rem 1rem;
+    padding-top: 0.5rem;
     flex: 1;
     overflow-y: auto;
     min-height: 0;
-    margin-bottom: calc(80px + var(--keyboard-offset, 0px)); /* Ensure input bar does not overlap messages */
+    margin-bottom: calc(76px + var(--keyboard-offset, 0px));
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     overscroll-behavior: contain;
   }
 
   #chat-form {
-    padding: 1rem;
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding: 0.75rem 1rem;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
     position: fixed;
     bottom: var(--keyboard-offset, 0px);
     left: 0;
@@ -930,55 +951,50 @@ footer {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 100;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-    /* Ensure input is always accessible and stays in position */
-    min-height: 70px;
+    min-height: 68px;
     display: flex;
     align-items: center;
-    /* Prevent movement during interactions */
     transform: translateZ(0);
     will-change: transform;
   }
 
   .message {
-    max-width: 90%;
-    font-size: 0.9rem;
-    /* Better mobile text rendering */
+    max-width: 88%;
+    font-size: 0.92rem;
     -webkit-font-smoothing: antialiased;
   }
 
   .input-container {
-    padding: 0.4rem;
-    /* Ensure smooth interaction */
+    padding: 0.35rem;
     transition: all 0.2s ease;
-    /* Prevent text selection issues */
-    user-select: none;
-    -webkit-user-select: none;
   }
 
   #user-input {
-    padding: 0.6rem 0.8rem;
-    font-size: 16px; /* Prevent zoom on iOS */
-    /* Optimize for mobile input */
+    padding: 0.65rem 0.85rem;
+    font-size: 16px;
     -webkit-appearance: none;
     border-radius: 0;
-    /* Ensure proper text input */
     line-height: 1.4;
-    /* Better mobile input */
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
   }
 
   #send-btn {
     min-width: 44px;
     height: 44px;
     padding: 0.6rem;
-    /* Optimize for mobile touch */
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
-    /* Ensure proper touch target */
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  }
+
+  .conversation-item {
+    padding: 0.85rem 1rem;
+    min-height: 48px;
+  }
+
+  .delete-conversation {
+    opacity: 1;
+    min-width: 36px;
+    min-height: 36px;
   }
 
   footer {
@@ -987,329 +1003,48 @@ footer {
 }
 
 @media (max-width: 480px) {
-  body {
-    padding: 0;
-    margin: 0;
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
+  .header-title {
+    font-size: 1rem;
   }
 
-  header {
-    padding: 0.75rem 1rem;
-    /* Ensure header doesn't interfere with chat on mobile */
-    position: sticky;
-    top: 0;
-    z-index: 100;
+  .company-logo {
+    height: 42px;
   }
 
-  .app-container {
-    margin: 0;
-    height: 100vh;
-    height: 100dvh;
-    border-radius: 0;
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    /* Safe area support */
-    padding-bottom: env(safe-area-inset-bottom);
-    /* Add top padding to account for fixed header */
-    padding-top: 80px; /* Adjust based on header height */
+  .sidebar {
+    width: min(90vw, 300px);
   }
 
-  .chat-container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    position: relative;
+  .message {
+    max-width: 92%;
+    font-size: 0.88rem;
+    padding: 0.8rem 1.1rem;
   }
 
-  .chat-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+  .chat-box {
+    padding: 0.65rem 0.85rem;
+    margin-bottom: calc(72px + var(--keyboard-offset, 0px));
   }
 
-  #chat-wrapper {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+  #chat-form {
+    padding: 0.65rem 0.85rem;
+    min-height: 64px;
+  }
+}
+
+@media (max-width: 360px) {
+  .header-title {
+    font-size: 0.92rem;
+  }
+
+  .company-logo {
+    height: 38px;
   }
 
   .message {
     max-width: 95%;
     font-size: 0.85rem;
-    padding: 0.8rem 1.2rem;
-  }
-
-  .chat-box {
-    padding: 0.75rem;
-    padding-top: 3rem; /* Increased top padding to prevent header overlap */
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-    /* Remove problematic padding-bottom */
-    /* Better mobile scrolling */
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-    /* Ensure proper mobile scrolling */
-    overscroll-behavior: contain;
-  }
-
-  #chat-form {
-    padding: 0.75rem;
-    position: fixed;
-    bottom: var(--keyboard-offset, 0px);
-    left: 0;
-    right: 0;
-    background: rgba(0, 0, 0, 0.98);
-    backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    z-index: 100;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-    /* Ensure input is always accessible and stays in position */
-    min-height: 65px;
-    display: flex;
-    align-items: center;
-    /* Prevent movement during interactions */
-    transform: translateZ(0);
-    will-change: transform;
-  }
-
-  .input-container {
-    padding: 0.3rem;
-    /* Ensure smooth interaction */
-    transition: all 0.2s ease;
-    /* Prevent text selection issues */
-    user-select: none;
-    -webkit-user-select: none;
-  }
-
-  #user-input {
-    padding: 0.5rem 0.7rem;
-    font-size: 0.85rem;
-    /* Optimize for mobile input */
-    -webkit-appearance: none;
-    border-radius: 0;
-    /* Ensure proper text input */
-    line-height: 1.4;
-    /* Prevent zoom on iOS */
-    font-size: 16px;
-  }
-
-  #send-btn {
-    min-width: 35px;
-    height: 35px;
-    padding: 0.5rem;
-    /* Optimize for mobile touch */
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    /* Ensure proper touch target */
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-  .company-logo {
-    height: 60px;
-    filter: drop-shadow(0 0 4px rgba(248, 112, 96, 0.4));
-  }
-
-  .header-title {
-    font-size: 1.1rem;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    font-weight: 600;
-  }
-
-  .sidebar {
-    width: 260px;
-    background: rgba(10, 20, 35, 0.98);
-    backdrop-filter: blur(20px);
-  }
-
-  .sidebar-header {
-    padding: 1.2rem;
-    border-bottom: 1px solid rgba(248, 112, 96, 0.2);
-  }
-
-  .sidebar-close {
-    display: block;
-  }
-
-  .conversations-list {
-    padding: 1rem;
-  }
-
-  .conversation-item {
-    padding: 0.8rem 1rem;
-    margin-bottom: 0.5rem;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(248, 112, 96, 0.15);
-  }
-
-  .sidebar-footer {
-    padding: 1.2rem;
-    border-top: 1px solid rgba(248, 112, 96, 0.2);
-  }
-
-  footer {
-    display: none;
-  }
-}
-
-@media (max-width: 360px) {
-  body {
-    padding: 0;
-    margin: 0;
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
-    /* Ensure no zooming issues */
-    -webkit-text-size-adjust: 100%;
-    -ms-text-size-adjust: 100%;
-  }
-
-  .app-container {
-    margin: 0;
-    height: 100vh;
-    height: 100dvh;
-    border-radius: 0;
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    /* Safe area support */
-    padding-bottom: env(safe-area-inset-bottom);
-    /* Add top padding to account for fixed header */
-    padding-top: 80px; /* Adjust based on header height */
-  }
-
-  .chat-container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    position: relative;
-  }
-
-  .chat-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-
-  #chat-wrapper {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-
-  .message {
-    max-width: 98%;
-    font-size: 0.8rem;
-    padding: 0.7rem 1rem;
-    /* Better mobile text rendering */
-    -webkit-font-smoothing: antialiased;
-  }
-
-  .chat-box {
-    padding: 0.5rem;
-    padding-top: 3rem; /* Increased top padding to prevent header overlap */
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-    /* Remove problematic padding-bottom */
-    /* Better mobile scrolling */
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-    /* Ensure proper mobile scrolling */
-    overscroll-behavior: contain;
-  }
-
-  #chat-form {
-    padding: 0.5rem;
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
-    position: fixed;
-    bottom: var(--keyboard-offset, 0px);
-    left: 0;
-    right: 0;
-    background: rgba(0, 0, 0, 0.98);
-    backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    z-index: 100;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-    /* Ensure input is always accessible */
-    min-height: 60px;
-    display: flex;
-    align-items: center;
-  }
-
-  .company-logo {
-    height: 55px;
-    filter: drop-shadow(0 0 3px rgba(248, 112, 96, 0.4));
-  }
-
-  .header-title {
-    font-size: 1rem;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    font-weight: 600;
-  }
-
-  .sidebar-toggle {
-    /* Better touch target for small screens */
-    min-width: 48px;
-    min-height: 48px;
-    padding: 0.75rem;
-  }
-
-  .input-container {
-    padding: 0.3rem;
-    /* Ensure smooth interaction */
-    transition: all 0.2s ease;
-    /* Prevent text selection issues */
-    user-select: none;
-    -webkit-user-select: none;
-  }
-
-  #user-input {
-    padding: 0.5rem 0.7rem;
-    font-size: 16px; /* Prevent zoom on iOS */
-    /* Optimize for mobile input */
-    -webkit-appearance: none;
-    border-radius: 0;
-    /* Ensure proper text input */
-    line-height: 1.4;
-    /* Better mobile input */
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  #send-btn {
-    min-width: 48px;
-    height: 48px;
-    padding: 0.5rem;
-    /* Optimize for mobile touch */
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    /* Ensure proper touch target */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  footer {
-    display: none;
+    padding: 0.75rem 1rem;
   }
 }
 

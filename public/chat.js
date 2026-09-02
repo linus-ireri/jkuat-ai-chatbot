@@ -35,9 +35,27 @@ document.addEventListener("DOMContentLoaded", () => {
       handleSendMessage();
     });
 
-    sidebarToggle.addEventListener("click", toggleSidebar);
-    sidebarClose.addEventListener("click", closeSidebar);
-    sidebarBackdrop.addEventListener("click", closeSidebar);
+    if (sidebarToggle) {
+      sidebarToggle.addEventListener("click", toggleSidebar);
+    }
+    if (sidebarClose) {
+      sidebarClose.addEventListener("click", closeSidebar);
+    }
+    if (sidebarBackdrop) {
+      sidebarBackdrop.addEventListener("click", closeSidebar);
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && sidebar?.classList.contains("open")) {
+        closeSidebar();
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      if (!isMobileView()) {
+        closeSidebar();
+      }
+    });
 
     if (newChatBtn) {
       setupNewChatButton();
@@ -211,7 +229,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderConversationsList();
     clearChatBox();
 
-    if (window.innerWidth <= 768) {
+    if (isMobileView()) {
       closeSidebar();
     }
   }
@@ -226,7 +244,9 @@ document.addEventListener("DOMContentLoaded", () => {
     activeConversationId = conversationId;
     renderMessages(conversation.messages);
     renderConversationsList();
-    closeSidebar();
+    if (isMobileView()) {
+      closeSidebar();
+    }
   }
 
   function addMessageToMemory(role, content) {
@@ -270,19 +290,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- UI Helper Functions ---
 
+  function isMobileView() {
+    return window.matchMedia("(max-width: 768px)").matches;
+  }
+
   function toggleSidebar() {
+    if (!sidebar || !sidebarBackdrop) return;
+
     if (document.activeElement === userInputElement) {
       userInputElement.blur();
     }
-    sidebar.classList.toggle("open");
-    sidebarBackdrop.classList.toggle("open");
-    document.body.style.overflow = sidebar.classList.contains("open") ? 'hidden' : '';
+
+    const isOpen = sidebar.classList.toggle("open");
+    sidebarBackdrop.classList.toggle("open", isOpen);
+    document.body.style.overflow = isOpen ? "hidden" : "";
+
+    if (sidebarToggle) {
+      sidebarToggle.setAttribute("aria-expanded", String(isOpen));
+      sidebarToggle.setAttribute("aria-label", isOpen ? "Close conversations" : "Open conversations");
+    }
   }
 
   function closeSidebar() {
+    if (!sidebar || !sidebarBackdrop) return;
+
     sidebar.classList.remove("open");
     sidebarBackdrop.classList.remove("open");
-    document.body.style.overflow = '';
+    document.body.style.overflow = "";
+
+    if (sidebarToggle) {
+      sidebarToggle.setAttribute("aria-expanded", "false");
+      sidebarToggle.setAttribute("aria-label", "Open conversations");
+    }
   }
 
   function renderMessages(messages) {
@@ -416,7 +455,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function setupMobileKeyboardDetection() {
     userInputElement.addEventListener("focus", () => {
-      if (sidebar.classList.contains("open")) closeSidebar();
+      if (sidebar?.classList.contains("open")) closeSidebar();
       setTimeout(scrollChatToBottom, 50);
     });
 

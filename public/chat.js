@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const sidebarBackdrop = document.getElementById("sidebar-backdrop");
   const sidebarClose = document.getElementById("sidebar-close");
   const newChatBtn = document.getElementById("new-chat-btn");
+  const mobileNewChatBtn = document.getElementById("mobile-new-chat-btn");
   const conversationsList = document.getElementById("conversations-list");
   const loadingIndicator = document.getElementById("loading-indicator");
 
@@ -58,7 +59,19 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     if (newChatBtn) {
-      setupNewChatButton();
+      newChatBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        createNewConversation();
+      });
+    }
+
+    if (mobileNewChatBtn) {
+      mobileNewChatBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        createNewConversation();
+      });
     }
 
     setupMobileKeyboardDetection();
@@ -83,6 +96,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!isValidMessage(sanitizedMessage)) return;
 
     appendMessage("user", sanitizedMessage);
+    setConversationTitleFromFirstMessage(sanitizedMessage);
     addMessageToMemory("user", sanitizedMessage);
     userInputElement.value = "";
 
@@ -114,8 +128,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       appendMessage("bot", botReply);
       addMessageToMemory("bot", botReply);
-
-      updateConversationTitleIfNeeded(userMessage);
 
     } catch (error) {
       console.error("Full error details:", error);
@@ -213,7 +225,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- Conversation Management ---
 
+  const WELCOME_MESSAGE = "Hello! I'm Veritas.AI, your official JKUAT assistant. I can help you with information about courses, lectures, academic programs, admissions, and official communications from the university.";
+
   function createNewConversation() {
+    const existingEmptyChat = conversations.find(
+      (c) => c.title === "New Chat" && (!c.messages || c.messages.length === 0)
+    );
+
+    if (existingEmptyChat) {
+      loadConversation(existingEmptyChat.id);
+      showWelcomeMessage();
+      focusChatInput();
+      return;
+    }
+
     const conversationId = Date.now().toString();
     const conversation = {
       id: conversationId,
@@ -225,13 +250,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     conversations.unshift(conversation);
     saveConversations();
-    loadConversation(conversationId);
+    activeConversationId = conversationId;
     renderConversationsList();
-    clearChatBox();
+    showWelcomeMessage();
+    focusChatInput();
 
     if (isMobileView()) {
       closeSidebar();
     }
+  }
+
+  function showWelcomeMessage() {
+    clearChatBox();
+    appendMessage("bot", WELCOME_MESSAGE);
+  }
+
+  function focusChatInput() {
+    setTimeout(() => userInputElement?.focus(), isMobileView() ? 150 : 50);
   }
 
   function loadConversation(conversationId) {
@@ -242,7 +277,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     activeConversationId = conversationId;
-    renderMessages(conversation.messages);
+    if (!conversation.messages || conversation.messages.length === 0) {
+      showWelcomeMessage();
+    } else {
+      renderMessages(conversation.messages);
+    }
     renderConversationsList();
     if (isMobileView()) {
       closeSidebar();
@@ -260,7 +299,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     conversation.messages.push({ role, text: content, timestamp: new Date().toISOString() });
+    conversation.updatedAt = new Date().toISOString();
     saveConversations();
+    renderConversationsList();
   }
 
   function getConversationContext() {
@@ -271,11 +312,19 @@ document.addEventListener("DOMContentLoaded", () => {
     return conversation.messages.slice(-10).map(msg => ({ role: msg.role, content: msg.text }));
   }
 
-  function updateConversationTitleIfNeeded(userMessage) {
-    const conversation = conversations.find(c => c.id === activeConversationId);
-    if (conversation && conversation.title === "New Chat") {
-      const shortTitle = userMessage.length > 30 ? userMessage.substring(0, 30) + "..." : userMessage;
-      updateConversationTitle(activeConversationId, shortTitle);
+  function getConversationTitleFromMessage(message) {
+    const cleaned = sanitizeInput(message).replace(/\s+/g, " ").trim();
+    if (!cleaned) return "New Chat";
+    return cleaned.length > 40 ? `${cleaned.substring(0, 40)}...` : cleaned;
+  }
+
+  function setConversationTitleFromFirstMessage(userMessage) {
+    const conversation = conversations.find((c) => c.id === activeConversationId);
+    if (!conversation || conversation.title !== "New Chat") return;
+
+    const userMessageCount = conversation.messages.filter((msg) => msg.role === "user").length;
+    if (userMessageCount === 0) {
+      updateConversationTitle(activeConversationId, getConversationTitleFromMessage(userMessage));
     }
   }
 
@@ -341,18 +390,36 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderConversationsList() {
+    if (!conversationsList) return;
+
     conversationsList.innerHTML = '';
     conversations.forEach(conversation => {
       const el = document.createElement('div');
       el.className = `conversation-item ${conversation.id === activeConversationId ? 'active' : ''}`;
       el.setAttribute('data-conversation-id', conversation.id);
-      el.innerHTML = `
-        <div class="conversation-info">
-          <div class="conversation-title">${conversation.title}</div>
-          <div class="conversation-date">${formatDate(conversation.updatedAt)}</div>
-        </div>
-        <button class="delete-conversation"><i class="fas fa-trash"></i></button>
-      `;
+
+      const info = document.createElement('div');
+      info.className = 'conversation-info';
+
+      const titleEl = document.createElement('div');
+      titleEl.className = 'conversation-title';
+      titleEl.textContent = conversation.title || 'New Chat';
+
+      const dateEl = document.createElement('div');
+      dateEl.className = 'conversation-date';
+      dateEl.textContent = formatDate(conversation.updatedAt);
+
+      info.appendChild(titleEl);
+      info.appendChild(dateEl);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'delete-conversation';
+      deleteBtn.type = 'button';
+      deleteBtn.setAttribute('aria-label', `Delete ${conversation.title || 'chat'}`);
+      deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+
+      el.appendChild(info);
+      el.appendChild(deleteBtn);
 
       el.addEventListener('click', (e) => {
         if (!e.target.closest('.delete-conversation')) {
@@ -360,7 +427,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
 
-      el.querySelector('.delete-conversation').addEventListener('click', (e) => {
+      deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         deleteConversation(conversation.id);
       });
@@ -419,7 +486,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (convo.title === "New Chat" && convo.messages?.length > 0) {
         const firstUserMsg = convo.messages.find(msg => msg.role === "user");
         if (firstUserMsg) {
-          convo.title = firstUserMsg.text.length > 30 ? firstUserMsg.text.substring(0, 30) + "..." : firstUserMsg.text;
+          convo.title = getConversationTitleFromMessage(firstUserMsg.text);
         }
       }
     });
@@ -442,16 +509,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- Mobile Specific ---
-
-  function setupNewChatButton() {
-    const newChatBtnClone = newChatBtn.cloneNode(true);
-    newChatBtn.parentNode.replaceChild(newChatBtnClone, newChatBtn);
-    newChatBtnClone.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      createNewConversation();
-    });
-  }
 
   function setupMobileKeyboardDetection() {
     userInputElement.addEventListener("focus", () => {

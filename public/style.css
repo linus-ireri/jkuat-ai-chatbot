@@ -131,6 +131,28 @@ header {
   flex-shrink: 0;
 }
 
+.mobile-new-chat-btn {
+  display: none;
+  background: rgba(248, 112, 96, 0.12);
+  border: 1px solid rgba(248, 112, 96, 0.35);
+  font-size: 1.1rem;
+  color: #F87060;
+  cursor: pointer;
+  padding: 0.75rem;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mobile-new-chat-btn:hover {
+  background-color: rgba(248, 112, 96, 0.2);
+  transform: scale(1.05);
+}
+
 .company-logo {
   height: 90px; /* Increased from 80px for better visibility */
   width: auto;
@@ -811,7 +833,13 @@ footer {
   }
 
   .header-spacer {
-    display: block;
+    display: none;
+  }
+
+  .mobile-new-chat-btn {
+    display: flex;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .company-logo {

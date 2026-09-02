@@ -225,20 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- Conversation Management ---
 
-  const WELCOME_MESSAGE = "Hello! I'm Veritas.AI, your official JKUAT assistant. I can help you with information about courses, lectures, academic programs, admissions, and official communications from the university.";
-
   function createNewConversation() {
-    const existingEmptyChat = conversations.find(
-      (c) => c.title === "New Chat" && (!c.messages || c.messages.length === 0)
-    );
-
-    if (existingEmptyChat) {
-      loadConversation(existingEmptyChat.id);
-      showWelcomeMessage();
-      focusChatInput();
-      return;
-    }
-
     const conversationId = Date.now().toString();
     const conversation = {
       id: conversationId,
@@ -251,18 +238,13 @@ document.addEventListener("DOMContentLoaded", () => {
     conversations.unshift(conversation);
     saveConversations();
     activeConversationId = conversationId;
+    clearChatBox();
     renderConversationsList();
-    showWelcomeMessage();
     focusChatInput();
 
     if (isMobileView()) {
       closeSidebar();
     }
-  }
-
-  function showWelcomeMessage() {
-    clearChatBox();
-    appendMessage("bot", WELCOME_MESSAGE);
   }
 
   function focusChatInput() {
@@ -278,7 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     activeConversationId = conversationId;
     if (!conversation.messages || conversation.messages.length === 0) {
-      showWelcomeMessage();
+      clearChatBox();
     } else {
       renderMessages(conversation.messages);
     }

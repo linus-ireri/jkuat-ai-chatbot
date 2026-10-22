@@ -3,7 +3,7 @@ import { cleanLlmAnswer } from "../../lib/clean-llm-answer.js";
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "qwen/qwen3.6-27b";
+const GROQ_MODEL = "openai/gpt-oss-120b"; // Use the official Groq model for JKUAT assistant
 
 const greetingResponses = {
   "who are you": "I am Veritas.AI, the official assistant for Jomo Kenyatta University of Agriculture and Technology. I can help with courses, campus directions, learning hours, academic programs, admissions, and student services. How can I assist you today?",

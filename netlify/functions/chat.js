@@ -72,7 +72,7 @@ async function llmWithRuleContext(userMessage) {
   const groqKey = process.env.GROQ_API_KEY;
   if (!groqKey) throw new Error('Missing GROQ_API_KEY');
   const apiUrl = "https://api.groq.com/openai/v1/chat/completions";
-  const model = "qwen/qwen3.6-27b";
+  const model = "openai/gpt-oss-120b"; // Use the official Groq model for JKUAT assistant
 
   const llmRes = await fetch(apiUrl, {
     method: "POST",

@@ -11,6 +11,7 @@ A modern AI chatbot project featuring Retrieval-Augmented Generation (RAG), vect
 - Environment variable support for secrets and API keys
 
 ## Project Structure
+
 ```
 jkuatAI/
   public/           # Frontend (index.html, chat.js, style.css, SVGs)

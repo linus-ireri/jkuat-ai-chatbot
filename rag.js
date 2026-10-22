@@ -59,7 +59,7 @@ Answer:
     console.error("❌ No LLM API key found. Set GROQ_API_KEY.");
     process.exit(1);
   }
-  const groqModel = "qwen/qwen3.6-27b";
+  const groqModel = "openai/gpt-oss-120b";
   const apiUrl = "https://api.groq.com/openai/v1/chat/completions";
 
   try {

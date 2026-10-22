@@ -139,7 +139,7 @@ app.post('/ask', async (req, res) => {
     if (!apiKey2) {
       return res.status(500).json({ error: 'LLM API key not set. Set GROQ_API_KEY' });
     }
-    const groqModel2 = 'qwen/qwen3.6-27b';
+    const groqModel2 = 'openai/gpt-oss-120b';
     const apiUrl2 = 'https://api.groq.com/openai/v1/chat/completions';
     const messages = [
       { role: "system", content: systemPromptWithContext },

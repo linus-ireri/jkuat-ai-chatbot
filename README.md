@@ -5,21 +5,36 @@ A modern AI chatbot project featuring Retrieval-Augmented Generation (RAG), vect
 ## Features
 - Conversational AI chatbot with rule-based and LLM-powered responses
 - Retrieval-Augmented Generation (RAG) using vector search
-- Web frontend (static HTML/CSS/JS)
+- Web frontend (static HTML/CSS/JS) — **Veritas.AI** at `/`
+- **VeritasRAG** dedicated UI at `/veritas-rag/` (Generic document RAG + JKUAT role dashboards)
 - WhatsApp integration via webhook
 - Secure, rate-limited Express server for RAG
 - Environment variable support for secrets and API keys
+
+## VeritasRAG
+
+New independent product surface (does **not** replace Veritas.AI). See **[VERITASRAG.md](./VERITASRAG.md)** for architecture, demo script, APIs, and persistence limits.
+
+```sh
+npm start
+# UI:  http://localhost:3001/veritas-rag-ui/
+# API: http://localhost:3001/veritas-rag/meta
+```
 
 ## Project Structure
 
 ```
 jkuatAI/
-  public/           # Frontend (index.html, chat.js, style.css, SVGs)
-  netlify/functions/ # Netlify serverless functions (askai.js, chat.js, whatsapp-webhook.js)
-  rag-server.js     # Express RAG server
-  rag.js, retrieve.js # RAG utilities and scripts
-  vector_store/     # Vector DB files
-  docs/             # Documentation PDFs
+  public/                  # Veritas.AI frontend (unchanged entry)
+  public/veritas-rag/      # VeritasRAG dedicated UI
+  lib/veritas-rag/         # Workspaces, ingest, timetable, routes
+  netlify/functions/       # Netlify serverless functions
+  rag-server.js            # Express RAG server (+ /veritas-rag API)
+  data/                    # Runtime SQLite + workspace indexes (gitignored)
+  sample-data/             # Demo documents for Generic RAG
+  tests/                   # VeritasRAG workflow tests
+  vector_store/            # JKUAT institutional HNSW index
+  docs/                    # Source PDFs for offline ingest
 ```
 
 ## Getting Started

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VeritasRAG Admin</title>
+    <link rel="stylesheet" href="/admin.css" />
+  </head>
+  <body class="admin-shell">
+    <aside class="admin-sidebar">
+      <div class="brand">
+        <strong>VeritasRAG</strong>
+        <span>Admin Console</span>
+      </div>
+      <nav>
+        <a class="nav-item active" href="/admin">Ingestion</a>
+        <a class="nav-item" href="/veritas-rag-ui/">Chat UI</a>
+      </nav>
+    </aside>
+
+    <main class="admin-main">
+      <section class="panel">
+        <h1>Ingestion & Security Dashboard</h1>
+        <p>Upload secure documents and scope them to the roles allowed to access the content.</p>
+
+        <form id="upload-form" class="upload-form">
+          <label class="field">
+            <span>Document</span>
+            <input id="file-input" type="file" name="files" accept=".pdf,.docx,.txt,.csv" multiple required />
+          </label>
+
+          <fieldset class="field role-fieldset">
+            <legend>Allowed roles</legend>
+            <div class="role-picker" id="roles">
+              <label class="role-option">
+                <input type="checkbox" name="allowedRoles" value="public" checked />
+                <span>public</span>
+              </label>
+              <label class="role-option">
+                <input type="checkbox" name="allowedRoles" value="student" checked />
+                <span>student</span>
+              </label>
+              <label class="role-option">
+                <input type="checkbox" name="allowedRoles" value="lecturer" checked />
+                <span>lecturer</span>
+              </label>
+              <label class="role-option">
+                <input type="checkbox" name="allowedRoles" value="staff" checked />
+                <span>staff</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <button class="btn-primary" type="submit">Upload & Index</button>
+        </form>
+
+        <div id="upload-status" class="upload-status"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-header">
+          <h2>Security & Audit Feed</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>User Role</th>
+                <th>Query Text</th>
+                <th>Chunks Retrieved</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="audit-body">
+              <tr>
+                <td colspan="5">Waiting for activity…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/admin.js"></script>
+  </body>
+</html>

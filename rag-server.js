@@ -4,27 +4,33 @@ import cors from 'cors';
 import axios from 'axios';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { HNSWLib } from "@langchain/community/vectorstores/hnswlib";
 import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddings/huggingface_transformers";
 
 import { cleanLlmAnswer } from './lib/clean-llm-answer.js';
+import { createVeritasRouter } from './lib/veritas-rag/routes.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.set('trust proxy', 1); // Trust first proxy (ngrok)
 const PORT = process.env.PORT || 3001;
 
 // Security headers
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false, // static UI served separately / with own CSP
+}));
 // Disable x-powered-by
 app.disable('x-powered-by');
 // CORS (open for now, restrict in prod)
 app.use(cors());
-// Body size limit
-app.use(express.json({ limit: '10kb' }));
-// Rate limiting (DoS protection)
+// Body size limit (uploads use multipart; JSON kept modest)
+app.use(express.json({ limit: '256kb' }));
+// Rate limiting (DoS protection) — higher budget for VeritasRAG demo traffic
 const limiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 20, // limit each IP to 20 requests per minute for testing
+  max: 120,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -167,11 +173,30 @@ app.post('/ask', async (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', veritasRag: true }));
+
+// VeritasRAG dedicated API (does not replace legacy /ask or /rag)
+app.use('/veritas-rag', createVeritasRouter({
+  getJkuatStore: () => vectorStore,
+}));
+
+// Serve the main public site and static assets from the app root for local/demo use
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Serve VeritasRAG static UI from the same origin during local/dev demos
+app.use('/veritas-rag-ui', express.static(path.join(__dirname, 'public', 'veritas-rag')));
 
 loadRAG().then(() => {
   app.listen(PORT, () => {
     console.log(`RAG server listening on port ${PORT}`);
+    console.log(`VeritasRAG API: http://localhost:${PORT}/veritas-rag/meta`);
+    console.log(`VeritasRAG UI:  http://localhost:${PORT}/veritas-rag-ui/`);
   });
 }).catch(err => {
   console.error('Failed to load RAG:', err);

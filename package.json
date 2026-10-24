@@ -5,7 +5,8 @@
   "main": "rag-server.js",
   "scripts": {
     "start": "node rag-server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/veritas-rag.test.js",
+    "veritasrag": "node rag-server.js"
   },
   "keywords": [],
   "author": "",
@@ -19,6 +20,7 @@
     "@langchain/core": "^1.1.48",
     "@langchain/textsplitters": "^1.0.1",
     "@xenova/transformers": "^2.0.1",
+    "adm-zip": "^0.6.1",
     "axios": "^1.10.0",
     "better-sqlite3": "^11.10.0",
     "cheerio": "^1.1.0",
@@ -30,8 +32,10 @@
     "hnswlib-node": "^3.0.0",
     "install": "^0.13.0",
     "langchain": "^1.4.2",
+    "multer": "^2.5.0",
     "node-fetch": "^3.3.2",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "uuid": "^14.0.3"
   },
   "devDependencies": {
     "ngrok": "^2.2.3"

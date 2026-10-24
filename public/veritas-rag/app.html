@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VeritasRAG Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="../LinoBulb.svg" />
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" crossorigin="anonymous" />
+</head>
+<body data-mode="generic">
+  <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
+  <div class="app-shell" id="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Navigation">
+      <a class="brand-mark" href="index.html" aria-label="JKUAT VeritasRAG home">
+        <img src="../jkuat-logo.png" alt="JKUAT Logo" class="brand-logo" />
+        <span class="brand-copy">
+          <strong>JKUAT</strong>
+          <small>VeritasRAG</small>
+        </span>
+      </a>
+
+      <div class="mode-switch" role="group" aria-label="Mode">
+        <button type="button" data-mode="generic" id="mode-generic">Generic</button>
+        <button type="button" data-mode="jkuat" id="mode-jkuat">JKUAT</button>
+      </div>
+
+      <div id="nav-links"></div>
+
+      <div id="history-panel" class="sidebar-history" aria-live="polite"></div>
+
+      <div style="margin-top:auto;padding:0.75rem;">
+        <span class="badge" id="demo-badge">Demo role</span>
+        <div id="role-label" style="font-size:0.8rem;color:var(--ink-muted);margin-top:0.4rem;"></div>
+      </div>
+    </aside>
+
+    <div class="main-col">
+      <header class="topbar">
+        <button type="button" class="icon-btn" id="menu-toggle" aria-label="Toggle navigation">
+          <i class="fas fa-bars"></i>
+        </button>
+        <h1 id="page-title">Overview</h1>
+        <span class="badge" id="mode-badge">Generic RAG</span>
+        <button type="button" class="icon-btn" id="theme-toggle" aria-label="Toggle theme">
+          <i class="fas fa-moon"></i>
+        </button>
+      </header>
+      <main class="content" id="view-root" tabindex="-1">
+        <div class="skeleton" style="height:2rem;width:40%"></div>
+        <div class="skeleton" style="height:8rem;"></div>
+      </main>
+    </div>
+  </div>
+  <div class="toast-host" id="toast-host" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

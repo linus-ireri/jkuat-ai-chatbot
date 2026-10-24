@@ -371,6 +371,7 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
   color: #fff;
   position: relative;
   overflow: hidden;
@@ -379,6 +380,11 @@ header {
   font-size: 1.08em;
   letter-spacing: 0.01em;
   text-shadow: 0 2px 6px rgba(0,0,0,0.18);
+}
+
+.conversation-info {
+  min-width: 0;
+  flex: 1;
 }
 
 .conversation-item:hover, .conversation-item:focus {
@@ -432,19 +438,29 @@ header {
 }
 
 .delete-conversation {
-  background: none;
-  border: none;
-  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.12);
+  border: 1px solid rgba(255, 107, 107, 0.45);
+  color: #ff9b9b;
   cursor: pointer;
-  padding: 0.25rem;
-  border-radius: 4px;
-  opacity: 0;
-  transition: all 0.3s ease;
+  padding: 0.35rem 0.45rem;
+  border-radius: 8px;
+  opacity: 0.8;
+  transition: all 0.2s ease;
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.conversation-item:hover .delete-conversation {
+.conversation-item:hover .delete-conversation,
+.conversation-item:focus-within .delete-conversation,
+.delete-conversation:hover,
+.delete-conversation:focus-visible {
   opacity: 1;
-  transform: scale(1.1);
+  transform: scale(1.08);
+  background: rgba(255, 107, 107, 0.18);
+  outline: none;
 }
 
 .sidebar-footer {

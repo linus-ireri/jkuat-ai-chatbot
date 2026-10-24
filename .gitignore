@@ -4,3 +4,7 @@ node_modules
 
 # Local Netlify folder
 .netlify
+
+# VeritasRAG runtime data (uploads, per-workspace indexes, SQLite)
+data/
+sample-data/uploads/

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VeritasRAG — AI grounded in trusted knowledge</title>
+  <meta name="description" content="VeritasRAG: Generic document RAG and JKUAT role-aware university assistance." />
+  <link rel="icon" type="image/svg+xml" href="../LinoBulb.svg" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="landing">
+    <nav class="landing-nav" aria-label="Primary">
+      <a class="brand-mark" href="index.html" aria-label="JKUAT VeritasRAG home">
+        <img src="../jkuat-logo.png" alt="JKUAT Logo" class="brand-logo" />
+        <span class="brand-copy">
+          <strong>JKUAT</strong>
+          <small>VeritasRAG</small>
+        </span>
+      </a>
+      <div class="nav-actions">
+        <a class="btn btn-ghost btn-sm" href="https://veritas-rag.vercel.app/" target="_blank" rel="noreferrer">Read more</a>
+        <a class="btn btn-ghost btn-sm" href="../index.html">Veritas.AI</a>
+      </div>
+    </nav>
+
+    <main class="landing-hero">
+      <h1>Trusted knowledge for the university.</h1>
+      <p class="lede">
+        Two operating modes in one product: private document workspaces, and a
+        university assistant whose answers and actions follow role-based access.
+      </p>
+      <div class="project-cta">
+        <a class="btn btn-primary" href="https://veritas-rag.vercel.app/" target="_blank" rel="noreferrer">Read more about the project</a>
+      </div>
+
+      <div class="mode-grid">
+        <article class="mode-panel">
+          <h2>Generic RAG</h2>
+          <p>Create a personal knowledge workspace from uploaded documents. Ask questions grounded in your own indexed files with source evidence.</p>
+          <div class="mode-actions">
+            <a class="btn btn-primary" href="app.html#/generic/overview">Open Workspace</a>
+            <a class="btn btn-secondary" href="app.html#/generic/documents">Upload Documents</a>
+            <a class="btn btn-ghost" href="app.html#/generic/assistant">Ask My Documents</a>
+          </div>
+        </article>
+
+        <article class="mode-panel">
+          <h2>JKUAT RAG</h2>
+          <p>Access university information, academic guidance, timetables, and role-aware assistance. Demo roles are clearly labelled — not verified identity.</p>
+          <div class="mode-actions">
+            <a class="btn btn-primary" href="app.html#/jkuat/overview?role=student">Enter as Student</a>
+            <a class="btn btn-secondary" href="app.html#/jkuat/overview?role=lecturer">Enter as Lecturer</a>
+            <a class="btn btn-secondary" href="app.html#/jkuat/overview?role=staff">Enter as Other Staff</a>
+            <a class="btn btn-ghost" href="app.html#/jkuat/overview?role=public">Continue as Public User</a>
+          </div>
+        </article>
+      </div>
+
+      <p class="demo-banner" role="note">
+        <strong>Demo notice:</strong> Role selection is for demonstration only and is never treated as verified institutional authentication.
+        Timetable records are labelled sample data.
+      </p>
+    </main>
+  </div>
+</body>
+</html>

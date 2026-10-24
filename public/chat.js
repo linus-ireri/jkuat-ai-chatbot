@@ -291,7 +291,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const conversation = conversations.find(c => c.id === activeConversationId);
     if (!conversation) return [];
 
-    return conversation.messages.slice(-10).map(msg => ({ role: msg.role, content: msg.text }));
+    return conversation.messages.slice(-15).map(msg => ({ role: msg.role, content: msg.text }));
   }
 
   function getConversationTitleFromMessage(message) {
@@ -379,6 +379,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const el = document.createElement('div');
       el.className = `conversation-item ${conversation.id === activeConversationId ? 'active' : ''}`;
       el.setAttribute('data-conversation-id', conversation.id);
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
 
       const info = document.createElement('div');
       info.className = 'conversation-info';
@@ -397,15 +399,23 @@ document.addEventListener("DOMContentLoaded", () => {
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'delete-conversation';
       deleteBtn.type = 'button';
+      deleteBtn.title = 'Delete conversation';
       deleteBtn.setAttribute('aria-label', `Delete ${conversation.title || 'chat'}`);
       deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
 
       el.appendChild(info);
       el.appendChild(deleteBtn);
 
+      const openConversation = () => loadConversation(conversation.id);
       el.addEventListener('click', (e) => {
         if (!e.target.closest('.delete-conversation')) {
-          loadConversation(conversation.id);
+          openConversation();
+        }
+      });
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openConversation();
         }
       });
 

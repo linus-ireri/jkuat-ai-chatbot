@@ -13,13 +13,14 @@
         <span>Admin Console</span>
       </div>
       <nav>
-        <a class="nav-item active" href="/admin">Ingestion</a>
+        <a class="nav-item active" href="#ingestion-panel">Ingestion</a>
+        <a class="nav-item" href="#documents-panel">Uploaded Documents</a>
         <a class="nav-item" href="/veritas-rag-ui/">Chat UI</a>
       </nav>
     </aside>
 
     <main class="admin-main">
-      <section class="panel">
+      <section class="panel" id="ingestion-panel">
         <h1>Ingestion & Security Dashboard</h1>
         <p>Upload secure documents and scope them to the roles allowed to access the content.</p>
 
@@ -33,19 +34,19 @@
             <legend>Allowed roles</legend>
             <div class="role-picker" id="roles">
               <label class="role-option">
-                <input type="checkbox" name="allowedRoles" value="public" checked />
+                <input type="checkbox" name="allowedRoles" value="public" />
                 <span>public</span>
               </label>
               <label class="role-option">
-                <input type="checkbox" name="allowedRoles" value="student" checked />
+                <input type="checkbox" name="allowedRoles" value="student" />
                 <span>student</span>
               </label>
               <label class="role-option">
-                <input type="checkbox" name="allowedRoles" value="lecturer" checked />
+                <input type="checkbox" name="allowedRoles" value="lecturer" />
                 <span>lecturer</span>
               </label>
               <label class="role-option">
-                <input type="checkbox" name="allowedRoles" value="staff" checked />
+                <input type="checkbox" name="allowedRoles" value="staff" />
                 <span>staff</span>
               </label>
             </div>
@@ -55,6 +56,30 @@
         </form>
 
         <div id="upload-status" class="upload-status"></div>
+      </section>
+
+      <section class="panel" id="documents-panel">
+        <div class="section-header">
+          <h2>Uploaded Documents</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Roles</th>
+                <th>Status</th>
+                <th>Indexed</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="documents-body">
+              <tr>
+                <td colspan="5">Loading documents…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section class="panel">

@@ -256,6 +256,41 @@ describe('role-aware retrieval and audit logging', () => {
     }
   });
 
+  it('logs a fresh audit event for each answered question, including the query text and outcome', async () => {
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+    axios.post = async (...args) => ({ data: { choices: [{ message: { content: 'Allowed answer.' } }] } });
+    try {
+      const result = await runVeritasQuery({
+        question: 'What are the student notice rules?',
+        ctx: {
+          mode: MODES.JKUAT,
+          role: ROLES.STUDENT,
+          userId: 'demo-student',
+          groups: ['MCS-Y2'],
+        },
+        jkuatVectorStore: {
+          similaritySearch: async () => [{
+            pageContent: 'Student notice rules: do not skip attendance.',
+            metadata: { source: 'student-rules.pdf', allowed_roles: ['student'] },
+          }],
+        },
+        conversationHistory: [],
+      });
+
+      assert.equal(result.rbacBlocked, false);
+      const auditRow = getDb().prepare(`
+        SELECT * FROM audit_events WHERE action = 'query.answer' ORDER BY created_at DESC LIMIT 1
+      `).get();
+      assert.ok(auditRow, 'answered queries should create a live audit row');
+      assert.match(JSON.stringify(auditRow.detail_json || {}), /student notice rules/i);
+      assert.match(JSON.stringify(auditRow.detail_json || {}), /ANSWERED/i);
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
+  });
+
   it('allows document chunks when the user role is included in allowed_roles', async () => {
     process.env.GROQ_API_KEY = 'test-key';
     const originalPost = axios.post;
@@ -281,6 +316,62 @@ describe('role-aware retrieval and audit logging', () => {
       assert.equal(result.rbacBlocked, false);
       assert.ok(String(result.answer || '').length > 0);
       assert.ok(Array.isArray(result.evidence));
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
+  });
+
+  it('retrieves admin-uploaded role-scoped documents in JKUAT mode for an allowed role', async () => {
+    const owner = `demo-admin-${uid()}`;
+    const ws = ensureWorkspace(owner, 'Admin Shared Files');
+    const docId = uid();
+    const filePath = path.join(DATA_DIR, 'workspaces', ws.id, 'files', `${docId}.txt`);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, 'Lecturer attendance policy: staff and lecturers must review the briefing before the Friday session.');
+
+    const inserted = insertDocument({
+      id: docId,
+      workspace_id: ws.id,
+      filename: 'lecturer-attendance.txt',
+      format: 'txt',
+      size_bytes: fs.statSync(filePath).size,
+      status: 'uploaded',
+      pages_or_sections: 0,
+      chunk_count: 0,
+      error_message: null,
+      storage_path: filePath,
+      indexed_at: null,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    });
+
+    await ingestDocument(inserted.id, { allowedRoles: ['lecturer', 'staff'] });
+
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+    let requestBody;
+    axios.post = async (...args) => {
+      requestBody = args[1];
+      return { data: { choices: [{ message: { content: 'The lecturer attendance policy requires review before the Friday session.' } }] } };
+    };
+
+    try {
+      const result = await runVeritasQuery({
+        question: 'What is the lecturer attendance policy?',
+        ctx: {
+          mode: MODES.JKUAT,
+          role: ROLES.LECTURER,
+          userId: 'demo-lecturer',
+          groups: ['MCS-Y2'],
+        },
+        jkuatVectorStore: null,
+        conversationHistory: [],
+      });
+
+      const evidenceText = (result.evidence || []).map((e) => `${e.title || ''} ${e.excerpt || ''}`).join('\n');
+      assert.ok(requestBody, 'query should still send a prompt to the model');
+      assert.match(evidenceText, /lecturer attendance policy|Friday session/i);
     } finally {
       axios.post = originalPost;
       delete process.env.GROQ_API_KEY;

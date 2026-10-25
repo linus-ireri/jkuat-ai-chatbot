@@ -21,7 +21,7 @@ import {
   DATA_DIR,
   getDb,
 } from '../lib/veritas-rag/db.js';
-import { ingestDocument, retrieveWorkspace, deleteFromIndex } from '../lib/veritas-rag/ingest-pipeline.js';
+import { ingestDocument, retrieveWorkspace, deleteFromIndex, normalizeAllowedRoles } from '../lib/veritas-rag/ingest-pipeline.js';
 import { parseAccessContext, MODES, ROLES } from '../lib/veritas-rag/auth.js';
 import { runVeritasQuery } from '../lib/veritas-rag/query.js';
 import axios from 'axios';
@@ -212,6 +212,91 @@ describe('answer sanitization', () => {
     const cleaned = cleanLlmAnswer(dirty);
     assert.ok(!/see Evidence|Evidence #\d+/i.test(cleaned));
     assert.ok(/Sunday, 6 July 2026/i.test(cleaned));
+  });
+
+  it('accepts custom role names in upload filtering and retrieval checks', async () => {
+    const allowed = normalizeAllowedRoles(['student', 'alumni', 'researcher']);
+    assert.deepEqual(allowed, ['student', 'alumni', 'researcher']);
+
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+    axios.post = async (...args) => ({ data: { choices: [{ message: { content: 'Allowed answer for alumni.' } }] } });
+
+    try {
+      const result = await runVeritasQuery({
+        question: 'What guidance applies to alumni?',
+        ctx: {
+          mode: MODES.JKUAT,
+          role: 'alumni',
+          userId: 'demo-alumni',
+          groups: [],
+        },
+        jkuatVectorStore: {
+          similaritySearch: async () => [{
+            pageContent: 'Alumni access guidance applies to graduates only.',
+            metadata: { source: 'alumni-guide.pdf', allowed_roles: ['alumni'] },
+          }],
+        },
+        conversationHistory: [],
+      });
+
+      assert.equal(result.rbacBlocked, false);
+      assert.match(String(result.answer || ''), /alumni/i);
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
+  });
+
+  it('restricts the JKUAT information guide and MCS timetable to student-only access', async () => {
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+    axios.post = async (...args) => ({ data: { choices: [{ message: { content: 'Student-only answer.' } }] } });
+
+    try {
+      const denied = await runVeritasQuery({
+        question: 'What is the fee payment threshold?',
+        ctx: {
+          mode: MODES.JKUAT,
+          role: ROLES.LECTURER,
+          userId: 'demo-lecturer',
+          groups: [],
+        },
+        jkuatVectorStore: {
+          similaritySearch: async () => [{
+            pageContent: 'A student must pay 75% before registering units.',
+            metadata: { source: 'JKUAT Information Guide', allowed_roles: ['public', 'student', 'lecturer'] },
+          }],
+        },
+        conversationHistory: [],
+      });
+
+      assert.equal(denied.rbacBlocked, true);
+      assert.match(String(denied.answer || ''), /not authorized|access denied|permission/i);
+
+      const allowed = await runVeritasQuery({
+        question: 'What is the fee payment threshold?',
+        ctx: {
+          mode: MODES.JKUAT,
+          role: ROLES.STUDENT,
+          userId: 'demo-student',
+          groups: ['MCS-Y2'],
+        },
+        jkuatVectorStore: {
+          similaritySearch: async () => [{
+            pageContent: 'A student must pay 75% before registering units.',
+            metadata: { source: 'JKUAT Information Guide', allowed_roles: ['public', 'student'] },
+          }],
+        },
+        conversationHistory: [],
+      });
+
+      assert.equal(allowed.rbacBlocked, false);
+      assert.match(String(allowed.answer || ''), /student|75%/i);
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
   });
 });
 

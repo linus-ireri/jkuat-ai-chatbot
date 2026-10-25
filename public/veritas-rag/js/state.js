@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'veritasrag_session_v1';
+const CUSTOM_ROLES_KEY = 'veritasrag_custom_roles_v1';
+const DEFAULT_ROLES = ['public', 'student', 'lecturer', 'staff'];
 
 const ROLE_USERS = {
   student: 'demo-student',
@@ -6,6 +8,28 @@ const ROLE_USERS = {
   staff: 'demo-staff',
   public: 'demo-public',
 };
+
+function normalizeRoleName(role) {
+  return String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function getCustomRoles() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CUSTOM_ROLES_KEY) || '[]');
+    if (!Array.isArray(raw)) return [];
+    return [...new Set(raw.map((role) => normalizeRoleName(role)).filter(Boolean))];
+  } catch {
+    return [];
+  }
+}
+
+export function getAvailableRoles() {
+  return [...new Set([...DEFAULT_ROLES, ...getCustomRoles()])];
+}
 
 function load() {
   try {
@@ -54,8 +78,9 @@ export function setMode(mode) {
 }
 
 export function setRole(role) {
-  state.role = role;
-  state.userId = ROLE_USERS[role] || 'demo-public';
+  const nextRole = normalizeRoleName(role) || 'public';
+  state.role = nextRole;
+  state.userId = ROLE_USERS[nextRole] || `demo-${nextRole || 'public'}`;
   persist();
 }
 

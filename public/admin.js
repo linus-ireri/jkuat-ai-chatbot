@@ -3,6 +3,74 @@ const form = document.getElementById('upload-form');
 const statusEl = document.getElementById('upload-status');
 const auditBody = document.getElementById('audit-body');
 const documentsBody = document.getElementById('documents-body');
+const customRoleInput = document.getElementById('custom-role-input');
+const addRoleButton = document.getElementById('add-role-btn');
+const roleContainer = document.getElementById('roles');
+const CUSTOM_ROLES_KEY = 'veritasrag_custom_roles_v1';
+const DEFAULT_ROLES = ['public', 'student', 'lecturer', 'staff'];
+
+function normalizeRoleName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function getCustomRoles() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CUSTOM_ROLES_KEY) || '[]');
+    if (!Array.isArray(raw)) return [];
+    return [...new Set(raw.map((role) => normalizeRoleName(role)).filter(Boolean))];
+  } catch {
+    return [];
+  }
+}
+
+function persistCustomRoles(roles) {
+  const cleaned = [...new Set((Array.isArray(roles) ? roles : []).map((role) => normalizeRoleName(role)).filter(Boolean))];
+  localStorage.setItem(CUSTOM_ROLES_KEY, JSON.stringify(cleaned));
+}
+
+function getAllRoles() {
+  return [...new Set([...DEFAULT_ROLES, ...getCustomRoles()])];
+}
+
+function renderRolePicker() {
+  if (!roleContainer) return;
+  const allRoles = getAllRoles();
+  roleContainer.innerHTML = allRoles.map((role) => `
+    <label class="role-option">
+      <input type="checkbox" name="allowedRoles" value="${role}" />
+      <span>${role}</span>
+    </label>
+  `).join('');
+}
+
+function addCustomRole() {
+  const values = String(customRoleInput?.value || '')
+    .split(',')
+    .map((part) => normalizeRoleName(part))
+    .filter(Boolean);
+
+  if (!values.length) {
+    statusEl.textContent = 'Enter a role name before adding it.';
+    return;
+  }
+
+  const current = getCustomRoles();
+  const nextRoles = values.filter((role) => !current.includes(role));
+
+  if (!nextRoles.length) {
+    statusEl.textContent = `All roles already exist.`;
+    return;
+  }
+
+  persistCustomRoles([...current, ...nextRoles]);
+  renderRolePicker();
+  if (customRoleInput) customRoleInput.value = '';
+  statusEl.textContent = `Added role${nextRoles.length > 1 ? 's' : ''}: ${nextRoles.join(', ')}.`;
+}
 
 function parseRoles(value) {
   if (Array.isArray(value)) return value;
@@ -151,6 +219,21 @@ form.addEventListener('submit', async (event) => {
     statusEl.textContent = err.message;
   }
 });
+
+if (addRoleButton) {
+  addRoleButton.addEventListener('click', addCustomRole);
+}
+
+if (customRoleInput) {
+  customRoleInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addCustomRole();
+    }
+  });
+}
+
+renderRolePicker();
 
 document.querySelectorAll('.nav-item').forEach((link) => {
   link.addEventListener('click', () => {

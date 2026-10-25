@@ -1,6 +1,22 @@
 import { api, getApiBase } from './api.js';
-import { state, setRole } from './state.js';
+import { state, setRole, getAvailableRoles } from './state.js';
 import { toast } from './toast.js';
+
+function roleDisplayName(role) {
+  const normalized = String(role || '').toLowerCase();
+  const labels = {
+    student: 'Student',
+    lecturer: 'Lecturer',
+    staff: 'Other Staff',
+    public: 'Public User',
+  };
+  if (labels[normalized]) return labels[normalized];
+  return normalized
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ') || 'User';
+}
 
 function esc(s) {
   return String(s ?? '')
@@ -113,7 +129,7 @@ export async function renderOverview(root) {
   root.innerHTML = `<div class="panel"><div class="skeleton" style="height:8rem"></div></div>`;
   try {
     const dash = await api.dashboard();
-    const roleTitle = { student: 'Student', lecturer: 'Lecturer', staff: 'Other Staff', public: 'Public User' }[dash.role] || dash.role;
+    const roleTitle = roleDisplayName(dash.role);
     let body = `
       <div class="panel">
         <h2>${esc(roleTitle)} dashboard</h2>
@@ -750,6 +766,10 @@ export async function renderHistory(root) {
 }
 
 export async function renderSettings(root) {
+  const roleOptions = getAvailableRoles()
+    .map((role) => `<option value="${esc(role)}">${esc(roleDisplayName(role))}</option>`)
+    .join('');
+
   root.innerHTML = `
     <div class="panel">
       <h2>Settings</h2>
@@ -761,10 +781,7 @@ export async function renderSettings(root) {
       <div class="form-row">
         <label>JKUAT demo role</label>
         <select id="role-select">
-          <option value="student">Student</option>
-          <option value="lecturer">Lecturer</option>
-          <option value="staff">Other Staff</option>
-          <option value="public">Public User</option>
+          ${roleOptions}
         </select>
       </div>
       <button type="button" class="btn btn-primary" id="save-settings">Save</button>

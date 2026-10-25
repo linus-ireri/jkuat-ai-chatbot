@@ -30,26 +30,17 @@
             <input id="file-input" type="file" name="files" accept=".pdf,.docx,.txt,.csv" multiple required />
           </label>
 
+          <div class="field">
+            <label for="custom-role-input">Add custom role</label>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <input id="custom-role-input" type="text" placeholder="e.g. alumni, researcher" />
+              <button type="button" class="btn-secondary" id="add-role-btn">Add role</button>
+            </div>
+          </div>
+
           <fieldset class="field role-fieldset">
             <legend>Allowed roles</legend>
-            <div class="role-picker" id="roles">
-              <label class="role-option">
-                <input type="checkbox" name="allowedRoles" value="public" />
-                <span>public</span>
-              </label>
-              <label class="role-option">
-                <input type="checkbox" name="allowedRoles" value="student" />
-                <span>student</span>
-              </label>
-              <label class="role-option">
-                <input type="checkbox" name="allowedRoles" value="lecturer" />
-                <span>lecturer</span>
-              </label>
-              <label class="role-option">
-                <input type="checkbox" name="allowedRoles" value="staff" />
-                <span>staff</span>
-              </label>
-            </div>
+            <div class="role-picker" id="roles"></div>
           </fieldset>
 
           <button class="btn-primary" type="submit">Upload & Index</button>

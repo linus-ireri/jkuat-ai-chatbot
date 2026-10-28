@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
@@ -8,6 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { HNSWLib } from "@langchain/community/vectorstores/hnswlib";
 import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddings/huggingface_transformers";
+import { Document } from '@langchain/core/documents';
 
 import { cleanLlmAnswer } from './lib/clean-llm-answer.js';
 import { createVeritasRouter } from './lib/veritas-rag/routes.js';
@@ -47,13 +49,46 @@ function isGreetingMessage(text) {
   return /^(hi|hello|hey|how are you|good morning|good afternoon|good evening|who are you|who are you\?)/.test(normalized);
 }
 
+async function ensureRootVectorStore() {
+  const storeDir = path.join(__dirname, 'vector_store');
+  const argsPath = path.join(storeDir, 'args.json');
+  const indexPath = path.join(storeDir, 'hnswlib.index');
+
+  if (fs.existsSync(argsPath) && fs.existsSync(indexPath)) {
+    return;
+  }
+
+  fs.mkdirSync(storeDir, { recursive: true });
+
+  const placeholderEmbeddings = new HuggingFaceTransformersEmbeddings({
+    modelName: 'Xenova/all-MiniLM-L6-v2',
+  });
+
+  const placeholderStore = await HNSWLib.fromDocuments(
+    [new Document({ pageContent: '__workspace_init__', metadata: { internal: true } })],
+    placeholderEmbeddings
+  );
+
+  await placeholderStore.save(storeDir);
+}
+
 async function loadRAG() {
   embeddings = new HuggingFaceTransformersEmbeddings({
     modelName: "Xenova/all-MiniLM-L6-v2"
   });
-  vectorStore = await HNSWLib.load("vector_store", embeddings);
+
+  const storeDir = path.join(__dirname, 'vector_store');
+  if (!fs.existsSync(storeDir) || !fs.existsSync(path.join(storeDir, 'args.json')) || !fs.existsSync(path.join(storeDir, 'hnswlib.index'))) {
+    await ensureRootVectorStore();
+  }
+
+  vectorStore = await HNSWLib.load(storeDir, embeddings);
   console.log("RAG vector store and embeddings loaded.");
 }
+
+// Maximum L2 distance to consider a chunk relevant (HNSWLib returns L2 distances; lower = more similar).
+// Chunks beyond this threshold are discarded as semantically unrelated to the question.
+const SIMILARITY_THRESHOLD = 1.2;
 
 app.post('/rag', async (req, res) => {
   const question = req.body.question;
@@ -62,8 +97,13 @@ app.post('/rag', async (req, res) => {
   }
 
   try {
-    const results = await vectorStore.similaritySearch(question, 5);
-    const context = results.map((doc, i) => `Context #${i + 1}:\n${doc.pageContent}`);
+    const rawResults = await vectorStore.similaritySearchWithScore(question, 10);
+    const results = rawResults
+      .filter(([doc, score]) => score <= SIMILARITY_THRESHOLD && doc?.pageContent !== '__workspace_init__' && !doc?.metadata?.internal)
+      .map(([doc]) => doc)
+      .slice(0, 5);
+    const filtered = results;
+    const context = filtered.map((doc, i) => `Context #${i + 1}:\n${doc.pageContent}`);
 
     const greetingInstruction = isGreetingMessage(question)
       ? "The user is greeting you. Respond warmly and briefly as a JKUAT assistant, then offer help with JKUAT topics. Do not sound rigid or say you cannot help with greetings."
@@ -82,7 +122,7 @@ app.post('/rag', async (req, res) => {
     5. If the context truly lacks relevant information, say "I don't have enough information about that in my knowledge base" and offer to direct the user to JKUAT's official channels.\n
     6. Avoid speculation or inference.\n7. Keep answers concise and practical.`;
     
-    const prompt = `Retrieved context: ${context.join(" ")}\n\nUser question: ${question}\n\nAnswer:`;
+    const prompt = `Retrieved context:\n${context.join("\n\n")}\n\nUser question: ${question}\n\nAnswer:`;
 
     // LLM call: use Groq only
     const apiKey = process.env.GROQ_API_KEY;
@@ -122,8 +162,13 @@ app.post('/ask', async (req, res) => {
   }
 
   try {
-    const results = await vectorStore.similaritySearch(question, 5);
-    const context = results.map((doc, i) => `Context #${i + 1}:\n${doc.pageContent}`);
+    const rawResults2 = await vectorStore.similaritySearchWithScore(question, 10);
+    const results = rawResults2
+      .filter(([doc, score]) => score <= SIMILARITY_THRESHOLD && doc?.pageContent !== '__workspace_init__' && !doc?.metadata?.internal)
+      .map(([doc]) => doc)
+      .slice(0, 5);
+    const filtered = results;
+    const context = filtered.map((doc, i) => `Context #${i + 1}:\n${doc.pageContent}`);
 
     const greetingInstruction = isGreetingMessage(question)
       ? "The user is greeting you. Respond warmly and briefly as a JKUAT assistant, then offer help with JKUAT topics. Do not sound rigid or say you cannot help with greetings."
@@ -138,7 +183,7 @@ app.post('/ask', async (req, res) => {
     
     const systemPromptWithContext = systemPrompt + `\nGuidelines:\n1. Base answers ONLY on the retrieved context provided.\n2. Use the retrieved context as your primary source of truth.\n3. If the context contains relevant information, answer from it directly before saying you lack information.\n4. Cite specific documents or sources from the context when referenced.\n5. If the context truly lacks relevant information, say "I don't have enough information about that in my knowledge base" and offer to direct the user to JKUAT's official channels.\n6. Avoid speculation or inference.\n7. Keep answers concise and practical.`;
 
-    const prompt = `Retrieved context: ${context.join(" ")}\n\nUser question: ${question}\n\nAnswer:`;
+    const prompt = `Retrieved context:\n${context.join("\n\n")}\n\nUser question: ${question}\n\nAnswer:`;
 
     // Use Groq only for /ask
     const apiKey2 = process.env.GROQ_API_KEY;

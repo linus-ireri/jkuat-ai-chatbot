@@ -4,13 +4,6 @@ import { toast } from './toast.js';
 
 function roleDisplayName(role) {
   const normalized = String(role || '').toLowerCase();
-  const labels = {
-    student: 'Student',
-    lecturer: 'Lecturer',
-    staff: 'Other Staff',
-    public: 'Public User',
-  };
-  if (labels[normalized]) return labels[normalized];
   return normalized
     .split('-')
     .filter(Boolean)
@@ -542,11 +535,31 @@ export async function renderAssistant(root, presetQ = '') {
 export async function renderTimetable(root) {
   root.innerHTML = `<div class="panel"><div class="skeleton" style="height:6rem"></div></div>`;
   try {
-    if (state.role === 'public') {
-      root.innerHTML = `<div class="panel"><h2>Timetable</h2><p class="empty">Public users cannot access private class schedules.</p></div>`;
+    if (!state.role) {
+      root.innerHTML = `<div class="panel"><h2>Timetable</h2><p class="empty">Select a role in Settings before opening private timetable data.</p></div>`;
       return;
     }
     const data = await api.timetable();
+
+    // Status badge colours for change requests
+    const statusColour = {
+      draft:            'style="background:var(--ink-muted);color:#fff"',
+      pending_approval: 'style="background:#f59e0b;color:#fff"',
+      approved:         'style="background:#3b82f6;color:#fff"',
+      published:        'style="background:#22c55e;color:#fff"',
+      rejected:         'style="background:var(--danger);color:#fff"',
+      cancelled:        'style="background:#6b7280;color:#fff"',
+    };
+
+    const statusLabel = {
+      draft:            'Draft',
+      pending_approval: 'Pending approval',
+      approved:         'Approved',
+      published:        'Published',
+      rejected:         'Rejected',
+      cancelled:        'Cancelled',
+    };
+
     let html = `
       <div class="panel">
         <h2>Timetable</h2>
@@ -554,9 +567,9 @@ export async function renderTimetable(root) {
         <div class="table-wrap"><table class="data"><thead><tr>
           <th>Unit</th><th>Day</th><th>Time</th><th>Venue</th><th>Group</th><th></th>
         </tr></thead><tbody>
-        ${data.entries.map((e) => `
+        ${(data.entries || []).map((e) => `
           <tr>
-            <td>${esc(e.unit_code)}<br><small>${esc(e.unit_name)}</small></td>
+            <td><strong>${esc(e.unit_code)}</strong><br><small>${esc(e.unit_name || e.unit_code)}</small></td>
             <td>${esc(e.day_of_week)}</td>
             <td>${esc(e.start_time)}–${esc(e.end_time)}</td>
             <td>${esc(e.venue_name)}</td>
@@ -571,119 +584,216 @@ export async function renderTimetable(root) {
 
     if (state.role === 'lecturer') {
       html += `
+        <!-- ── Propose change form ── -->
         <div class="panel" id="change-panel" hidden>
           <h2>Propose schedule change</h2>
-          <p class="sub">Draft → Pending Approval → Approved → Published. LLM cannot write timetable records.</p>
+          <p class="sub">Changes are saved as a <strong>Draft</strong> first. Review them below, then <strong>Publish</strong> to update the timetable and notify students.</p>
           <form id="change-form">
             <input type="hidden" name="entryId" />
+            <p id="change-unit-label" style="font-weight:600;margin-bottom:0.5rem"></p>
             <div class="grid-2">
-              <div class="form-row"><label>Day</label>
-                <select name="proposedDay">
+              <div class="form-row">
+                <label for="cf-day">New day</label>
+                <select id="cf-day" name="proposedDay">
                   ${['Monday','Tuesday','Wednesday','Thursday','Friday'].map((d) => `<option>${d}</option>`).join('')}
                 </select>
               </div>
-              <div class="form-row"><label>Venue</label>
-                <select name="proposedVenueId">
+              <div class="form-row">
+                <label for="cf-venue">New venue</label>
+                <select id="cf-venue" name="proposedVenueId">
                   <option value="v-lab1">SCC Lab 1</option>
                   <option value="v-lt2">Lecture Theatre 2</option>
                   <option value="v-hallA">Hall A</option>
                 </select>
               </div>
-              <div class="form-row"><label>Start</label><input name="proposedStart" type="time" required /></div>
-              <div class="form-row"><label>End</label><input name="proposedEnd" type="time" required /></div>
+              <div class="form-row">
+                <label for="cf-start">Start time</label>
+                <input id="cf-start" name="proposedStart" type="time" required />
+              </div>
+              <div class="form-row">
+                <label for="cf-end">End time</label>
+                <input id="cf-end" name="proposedEnd" type="time" required />
+              </div>
             </div>
-            <div class="form-row"><label>Reason</label><textarea name="reason" rows="2"></textarea></div>
-            <button type="submit" class="btn btn-primary">Save draft</button>
+            <div class="form-row">
+              <label for="cf-reason">Reason <small style="color:var(--ink-muted)">(optional)</small></label>
+              <textarea id="cf-reason" name="reason" rows="2" placeholder="e.g. Venue maintenance, lecturer conflict…"></textarea>
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
+              <button type="submit" class="btn btn-primary">Save as draft</button>
+              <button type="button" class="btn btn-ghost" id="cancel-change-form">Cancel</button>
+            </div>
           </form>
-          <div id="change-result"></div>
+          <div id="change-result" style="margin-top:0.75rem"></div>
         </div>
+
+        <!-- ── Change requests list ── -->
         <div class="panel">
-          <h2>Change requests</h2>
-          <div id="changes-list"><div class="skeleton"></div></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+            <h2 style="margin:0">Change requests</h2>
+            <button type="button" class="btn btn-ghost btn-sm" id="refresh-changes">↻ Refresh</button>
+          </div>
+          <p class="sub">Drafts are visible only to you. Published changes update the live timetable and send student notifications.</p>
+          <div id="changes-list"><div class="skeleton" style="height:3rem"></div></div>
         </div>`;
     }
     root.innerHTML = html;
 
     if (state.role === 'lecturer') {
-      const panel = root.querySelector('#change-panel');
-      const form = root.querySelector('#change-form');
+      const panel      = root.querySelector('#change-panel');
+      const form       = root.querySelector('#change-form');
+      const resultBox  = root.querySelector('#change-result');
+      const unitLabel  = root.querySelector('#change-unit-label');
+
+      // Open form when "Propose change" is clicked on a timetable row
       root.querySelectorAll('[data-change]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const e = JSON.parse(btn.dataset.change);
           panel.hidden = false;
-          form.entryId.value = e.id;
-          form.proposedDay.value = e.day_of_week;
-          form.proposedStart.value = e.start_time;
-          form.proposedEnd.value = e.end_time;
-          form.proposedVenueId.value = e.venue_id;
+          form.entryId.value          = e.id;
+          form.proposedDay.value       = e.day_of_week;
+          form.proposedStart.value     = e.start_time;
+          form.proposedEnd.value       = e.end_time;
+          form.proposedVenueId.value   = e.venue_id;
+          form.reason.value            = '';
+          resultBox.innerHTML          = '';
+          unitLabel.textContent        = `${e.unit_code} — ${e.unit_name || e.unit_code} (currently: ${e.day_of_week} ${e.start_time}–${e.end_time} @ ${e.venue_name})`;
           panel.scrollIntoView({ behavior: 'smooth' });
         });
       });
+
+      root.querySelector('#cancel-change-form').addEventListener('click', () => {
+        panel.hidden = true;
+        resultBox.innerHTML = '';
+      });
+
+      // Save draft
       form.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(form);
+        const submitBtn = form.querySelector('[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving…';
         try {
           const res = await api.proposeChange({
-            entryId: fd.get('entryId'),
-            proposedDay: fd.get('proposedDay'),
-            proposedStart: fd.get('proposedStart'),
-            proposedEnd: fd.get('proposedEnd'),
+            entryId:         fd.get('entryId'),
+            proposedDay:     fd.get('proposedDay'),
+            proposedStart:   fd.get('proposedStart'),
+            proposedEnd:     fd.get('proposedEnd'),
             proposedVenueId: fd.get('proposedVenueId'),
-            reason: fd.get('reason'),
+            reason:          fd.get('reason'),
           });
-          const conflicts = JSON.parse(res.change.conflict_json || '[]');
-          root.querySelector('#change-result').innerHTML = `
-            <p>Draft <code>${esc(res.change.id)}</code> created · status <strong>${esc(res.change.status)}</strong></p>
-            ${conflicts.length ? `<p style="color:var(--danger)">Conflicts: ${esc(JSON.stringify(conflicts))}</p>` : '<p>No conflicts detected.</p>'}
-            <button type="button" class="btn btn-secondary btn-sm" data-pub="${res.change.id}">Publish now (demo)</button>`;
-          root.querySelector('[data-pub]')?.addEventListener('click', async (e2) => {
-            const id = e2.target.dataset.pub;
-            if (!confirm('Publish this change and notify affected student groups?')) return;
-            await api.publishChange(id);
-            toast('Published — students notified');
-            renderTimetable(root);
+          const conflicts = JSON.parse(res.change?.conflict_json || '[]');
+          const venueLabel = { 'v-lab1': 'SCC Lab 1', 'v-lt2': 'Lecture Theatre 2', 'v-hallA': 'Hall A' };
+          resultBox.innerHTML = `
+            <div style="padding:0.75rem;border:1px solid var(--line);border-radius:10px;background:var(--bg-elevated)">
+              <p style="margin:0 0 0.4rem"><strong>Draft saved</strong> — status: <span class="status-pill" ${statusColour.draft}>Draft</span></p>
+              <p style="margin:0 0 0.4rem;font-size:0.85rem">
+                ${esc(res.change.proposed_day)} ${esc(res.change.proposed_start)}–${esc(res.change.proposed_end)}
+                @ ${esc(venueLabel[res.change.proposed_venue_id] || res.change.proposed_venue_id)}
+                ${res.change.reason ? `· <em>${esc(res.change.reason)}</em>` : ''}
+              </p>
+              ${conflicts.length
+                ? `<p style="color:var(--danger);font-size:0.85rem;margin:0 0 0.5rem">⚠ Conflicts detected — resolve before publishing.</p>`
+                : `<p style="color:#22c55e;font-size:0.85rem;margin:0 0 0.5rem">✓ No conflicts detected.</p>`}
+              ${!conflicts.length
+                ? `<button type="button" class="btn btn-primary btn-sm" data-pub="${res.change.id}">Publish now — notify students</button>`
+                : ''}
+            </div>`;
+          resultBox.querySelector('[data-pub]')?.addEventListener('click', async (e2) => {
+            if (!confirm('Publish this change? The timetable will be updated and students will receive a notification.')) return;
+            try {
+              await api.publishChange(e2.target.dataset.pub);
+              toast('Published — students notified ✓');
+              panel.hidden = true;
+              renderTimetable(root);
+            } catch (err) {
+              toast(err.message, true);
+            }
           });
           loadChanges();
         } catch (err) {
+          resultBox.innerHTML = `<p style="color:var(--danger)">${esc(err.message)}</p>`;
           toast(err.message, true);
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Save as draft';
         }
       });
+
+      root.querySelector('#refresh-changes').addEventListener('click', loadChanges);
 
       async function loadChanges() {
         const box = root.querySelector('#changes-list');
         try {
           const { changes } = await api.listChanges();
           if (!changes.length) {
-            box.innerHTML = `<div class="empty">No change requests yet.</div>`;
+            box.innerHTML = `<div class="empty">No change requests yet. Use <em>Propose change</em> on a timetable row to create one.</div>`;
             return;
           }
-          box.innerHTML = `<div class="table-wrap"><table class="data"><thead><tr><th>ID</th><th>Status</th><th>Proposed</th><th></th></tr></thead><tbody>
-            ${changes.map((c) => `<tr>
-              <td><small>${esc(c.id.slice(0, 8))}…</small></td>
-              <td><span class="status-pill">${esc(c.status)}</span></td>
-              <td>${esc(c.proposed_day)} ${esc(c.proposed_start)}–${esc(c.proposed_end)}</td>
-              <td>
-                ${c.status !== 'published' && c.status !== 'cancelled'
-                  ? `<button class="btn btn-primary btn-sm" data-publish="${c.id}">Publish</button>
-                     <button class="btn btn-ghost btn-sm" data-cancel="${c.id}">Cancel</button>`
-                  : '—'}
-              </td>
-            </tr>`).join('')}
+
+          const venueLabel = { 'v-lab1': 'SCC Lab 1', 'v-lt2': 'Lecture Theatre 2', 'v-hallA': 'Hall A' };
+
+          box.innerHTML = `<div class="table-wrap"><table class="data"><thead><tr>
+            <th>Unit</th>
+            <th>Status</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Reason</th>
+            <th>Actions</th>
+          </tr></thead><tbody>
+            ${changes.map((c) => {
+              const colour = statusColour[c.status] || '';
+              const label  = statusLabel[c.status]  || c.status;
+              const canAct = !['published','cancelled'].includes(c.status);
+              return `<tr>
+                <td><strong>${esc(c.entry_id.replace('tt-','').replace(/-\w+$/,'').toUpperCase())}</strong></td>
+                <td><span class="status-pill" ${colour}>${esc(label)}</span></td>
+                <td style="white-space:nowrap;font-size:0.85rem">
+                  ${c.entry_id ? `<em>original slot</em>` : '—'}
+                </td>
+                <td style="white-space:nowrap;font-size:0.85rem">
+                  ${esc(c.proposed_day)}<br>
+                  ${esc(c.proposed_start)}–${esc(c.proposed_end)}<br>
+                  <small>@ ${esc(venueLabel[c.proposed_venue_id] || c.proposed_venue_id)}</small>
+                </td>
+                <td style="font-size:0.85rem;max-width:12rem">${c.reason ? esc(c.reason) : '<em style="color:var(--ink-muted)">—</em>'}</td>
+                <td>
+                  ${canAct
+                    ? `<div class="inline-actions">
+                         <button class="btn btn-primary btn-sm" data-publish="${c.id}">Publish</button>
+                         <button class="btn btn-ghost btn-sm" data-cancel="${c.id}">Cancel</button>
+                       </div>`
+                    : `<span style="color:var(--ink-muted);font-size:0.8rem">${c.status === 'published' ? 'Live' : 'Closed'}</span>`}
+                </td>
+              </tr>`;
+            }).join('')}
           </tbody></table></div>`;
+
           box.querySelectorAll('[data-publish]').forEach((b) => b.addEventListener('click', async () => {
-            if (!confirm('Confirm publish? This updates the timetable and notifies students.')) return;
-            await api.publishChange(b.dataset.publish);
-            toast('Published');
-            renderTimetable(root);
+            if (!confirm('Publish this change? The timetable will update and students will be notified.')) return;
+            try {
+              await api.publishChange(b.dataset.publish);
+              toast('Published — students notified ✓');
+              renderTimetable(root);
+            } catch (err) {
+              toast(err.message, true);
+            }
           }));
           box.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', async () => {
-            await api.cancelChange(b.dataset.cancel);
-            loadChanges();
+            try {
+              await api.cancelChange(b.dataset.cancel);
+              toast('Change cancelled');
+              loadChanges();
+            } catch (err) {
+              toast(err.message, true);
+            }
           }));
         } catch (err) {
           box.innerHTML = `<div class="empty">${esc(err.message)}</div>`;
         }
       }
+
       loadChanges();
     }
   } catch (err) {
@@ -721,12 +831,29 @@ export async function renderNotifications(root) {
       return;
     }
     root.innerHTML = `<div class="panel"><h2>Notifications</h2>
-      ${notifications.map((n) => `
-        <div class="evidence-item" style="opacity:${n.read ? 0.65 : 1}">
-          <strong>${esc(n.title)}</strong>
-          <div class="excerpt">${esc(n.body)}</div>
-          <button type="button" class="btn btn-ghost btn-sm" data-read="${n.id}" ${n.read ? 'disabled' : ''}>Mark read</button>
-        </div>`).join('')}
+      ${notifications.map((n) => {
+        let meta = null;
+        try { meta = JSON.parse(n.meta_json || 'null'); } catch { /* ignore */ }
+        const scheduleDetail = meta?.next
+          ? `<div style="margin:0.4rem 0;padding:0.5rem 0.75rem;background:var(--bg-elevated);border-radius:8px;font-size:0.85rem;border-left:3px solid #3b82f6">
+               <div><strong>New schedule:</strong> ${esc(meta.next.day)} ${esc(meta.next.start)}–${esc(meta.next.end)} @ <strong>${esc(meta.next.venue || meta.next.venue_id)}</strong></div>
+               ${meta.previous ? `<div style="color:var(--ink-muted)">Was: ${esc(meta.previous.day)} ${esc(meta.previous.start)}–${esc(meta.previous.end)} @ ${esc(meta.previous.venue || meta.previous.venue_id)}</div>` : ''}
+             </div>`
+          : '';
+        return `
+        <div class="evidence-item" style="opacity:${n.read ? 0.65 : 1};margin-bottom:0.75rem">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">
+            <strong>${esc(n.title)}</strong>
+            ${!n.read ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3b82f6;flex-shrink:0;margin-top:4px" title="Unread"></span>` : ''}
+          </div>
+          ${scheduleDetail}
+          <div class="excerpt" style="white-space:pre-line">${esc(n.body)}</div>
+          <div style="margin-top:0.4rem;display:flex;gap:0.5rem;align-items:center">
+            <small style="color:var(--ink-muted)">${esc(n.created_at)}</small>
+            <button type="button" class="btn btn-ghost btn-sm" data-read="${n.id}" ${n.read ? 'disabled' : ''}>Mark read</button>
+          </div>
+        </div>`;
+      }).join('')}
     </div>`;
     root.querySelectorAll('[data-read]').forEach((b) => b.addEventListener('click', async () => {
       await api.markRead(b.dataset.read);
@@ -766,22 +893,23 @@ export async function renderHistory(root) {
 }
 
 export async function renderSettings(root) {
-  const roleOptions = getAvailableRoles()
+  const roles = getAvailableRoles();
+  const roleOptions = roles
     .map((role) => `<option value="${esc(role)}">${esc(roleDisplayName(role))}</option>`)
     .join('');
 
   root.innerHTML = `
     <div class="panel">
       <h2>Settings</h2>
-      <p class="sub">Demo session controls. Role selection is never verified identity.</p>
+      <p class="sub">Custom roles are created in the admin dashboard. Role selection is never verified identity.</p>
       <div class="form-row">
         <label>API base URL</label>
         <input id="api-base" value="${esc(getApiBase())}" />
       </div>
       <div class="form-row">
-        <label>JKUAT demo role</label>
+        <label>JKUAT role</label>
         <select id="role-select">
-          ${roleOptions}
+          ${roleOptions || '<option value="">No custom roles yet</option>'}
         </select>
       </div>
       <button type="button" class="btn btn-primary" id="save-settings">Save</button>
@@ -790,7 +918,9 @@ export async function renderSettings(root) {
       <h2>Knowledge freshness</h2>
       <div id="fresh"><div class="skeleton"></div></div>
     </div>`;
-  root.querySelector('#role-select').value = state.role || 'public';
+  if (roles.length) {
+    root.querySelector('#role-select').value = state.role || roles[0];
+  }
   root.querySelector('#save-settings').addEventListener('click', () => {
     localStorage.setItem('veritasrag_api', root.querySelector('#api-base').value.trim());
     setRole(root.querySelector('#role-select').value);

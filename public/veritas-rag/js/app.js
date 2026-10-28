@@ -1,4 +1,4 @@
-import { state, setMode, setRole, setTheme, applyTheme, persist } from './state.js';
+import { state, setMode, setRole, setTheme, applyTheme, persist, getAvailableRoles } from './state.js';
 import { api } from './api.js';
 import {
   renderOverview,
@@ -20,37 +20,14 @@ const NAV = {
     { id: 'documents', label: 'Documents', icon: 'fa-folder-open' },
     { id: 'settings', label: 'Settings', icon: 'fa-gear' },
   ],
-  jkuat: {
-    student: [
-      { id: 'overview', label: 'Overview', icon: 'fa-house' },
-      { id: 'assistant', label: 'AI Assistant', icon: 'fa-comments' },
-      { id: 'timetable', label: 'Timetable', icon: 'fa-calendar' },
-      { id: 'announcements', label: 'Announcements', icon: 'fa-bullhorn' },
-      { id: 'notifications', label: 'Notifications', icon: 'fa-bell' },
-      { id: 'settings', label: 'Settings', icon: 'fa-gear' },
-    ],
-    lecturer: [
-      { id: 'overview', label: 'Overview', icon: 'fa-house' },
-      { id: 'assistant', label: 'AI Assistant', icon: 'fa-comments' },
-      { id: 'timetable', label: 'Timetable', icon: 'fa-calendar' },
-      { id: 'announcements', label: 'Announcements', icon: 'fa-bullhorn' },
-      { id: 'notifications', label: 'Notifications', icon: 'fa-bell' },
-      { id: 'settings', label: 'Settings', icon: 'fa-gear' },
-    ],
-    staff: [
-      { id: 'overview', label: 'Overview', icon: 'fa-house' },
-      { id: 'assistant', label: 'AI Assistant', icon: 'fa-comments' },
-      { id: 'announcements', label: 'Announcements', icon: 'fa-bullhorn' },
-      { id: 'timetable', label: 'Timetable', icon: 'fa-calendar' },
-      { id: 'settings', label: 'Settings', icon: 'fa-gear' },
-    ],
-    public: [
-      { id: 'overview', label: 'Overview', icon: 'fa-house' },
-      { id: 'assistant', label: 'AI Assistant', icon: 'fa-comments' },
-      { id: 'announcements', label: 'Announcements', icon: 'fa-bullhorn' },
-      { id: 'settings', label: 'Settings', icon: 'fa-gear' },
-    ],
-  },
+  jkuat: [
+    { id: 'overview', label: 'Overview', icon: 'fa-house' },
+    { id: 'assistant', label: 'AI Assistant', icon: 'fa-comments' },
+    { id: 'timetable', label: 'Timetable', icon: 'fa-calendar' },
+    { id: 'announcements', label: 'Announcements', icon: 'fa-bullhorn' },
+    { id: 'notifications', label: 'Notifications', icon: 'fa-bell' },
+    { id: 'settings', label: 'Settings', icon: 'fa-gear' },
+  ],
 };
 
 function esc(value) {
@@ -76,7 +53,7 @@ function parseHash() {
 
 function navItems() {
   if (state.mode === 'generic') return NAV.generic;
-  return NAV.jkuat[state.role || 'public'] || NAV.jkuat.public;
+  return NAV.jkuat;
 }
 
 function renderNav(activePage) {
@@ -159,7 +136,10 @@ function updateChrome(page) {
 async function route() {
   const { mode, page, params } = parseHash();
   if (mode !== state.mode) setMode(mode);
-  if (mode === 'jkuat' && !state.role) setRole(params.role || 'public');
+  if (mode === 'jkuat' && !state.role) {
+    const next = params.role || getAvailableRoles()[0] || null;
+    if (next) setRole(next);
+  }
   persist();
   renderNav(page);
   await renderSidebarHistory();
@@ -199,7 +179,8 @@ document.getElementById('mode-generic').addEventListener('click', () => {
 });
 document.getElementById('mode-jkuat').addEventListener('click', () => {
   setMode('jkuat');
-  if (!state.role) setRole('student');
+  const next = getAvailableRoles()[0] || null;
+  if (next) setRole(next);
   location.hash = `#/jkuat/overview`;
 });
 document.getElementById('theme-toggle').addEventListener('click', () => {

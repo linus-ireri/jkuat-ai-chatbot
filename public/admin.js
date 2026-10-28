@@ -7,7 +7,7 @@ const customRoleInput = document.getElementById('custom-role-input');
 const addRoleButton = document.getElementById('add-role-btn');
 const roleContainer = document.getElementById('roles');
 const CUSTOM_ROLES_KEY = 'veritasrag_custom_roles_v1';
-const DEFAULT_ROLES = ['public', 'student', 'lecturer', 'staff'];
+const DEFAULT_ROLES = [];
 
 function normalizeRoleName(value) {
   return String(value || '')
@@ -36,15 +36,32 @@ function getAllRoles() {
   return [...new Set([...DEFAULT_ROLES, ...getCustomRoles()])];
 }
 
+function removeCustomRole(role) {
+  const cleaned = getCustomRoles().filter((item) => item !== role);
+  persistCustomRoles(cleaned);
+  renderRolePicker();
+  statusEl.textContent = `Removed role: ${role}.`;
+}
+
 function renderRolePicker() {
   if (!roleContainer) return;
   const allRoles = getAllRoles();
+  if (!allRoles.length) {
+    roleContainer.innerHTML = '<div class="empty-state">No custom roles yet. Add one to lock content to a specific access group.</div>';
+    return;
+  }
+
   roleContainer.innerHTML = allRoles.map((role) => `
     <label class="role-option">
       <input type="checkbox" name="allowedRoles" value="${role}" />
       <span>${role}</span>
+      <button type="button" class="role-remove" data-role-remove="${role}" aria-label="Remove ${role}">×</button>
     </label>
   `).join('');
+
+  roleContainer.querySelectorAll('[data-role-remove]').forEach((button) => {
+    button.addEventListener('click', () => removeCustomRole(button.getAttribute('data-role-remove')));
+  });
 }
 
 function addCustomRole() {
@@ -75,7 +92,7 @@ function addCustomRole() {
 function parseRoles(value) {
   if (Array.isArray(value)) return value;
   if (value === null || value === undefined) {
-    return ['public', 'student', 'lecturer', 'staff'];
+    return [];
   }
   const text = String(value).trim();
   if (!text) return [];

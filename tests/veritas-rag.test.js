@@ -3,7 +3,7 @@
  * Run: node --test tests/veritas-rag.test.js
  * Requires: RAG server on PORT (default 3001) OR runs in-process suite for structured APIs.
  */
-import { describe, it, before } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
@@ -32,6 +32,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const API = process.env.VERITAS_API || 'http://127.0.0.1:3001/veritas-rag';
 
+/**
+ * Purge all test-created workspaces and their files from DB + disk.
+ * Keeps only the production 'demo-generic' workspace intact.
+ */
+function purgeTestWorkspaces() {
+  const db = getDb();
+  const testWorkspaces = db
+    .prepare("SELECT id FROM workspaces WHERE owner_id != 'demo-generic'")
+    .all();
+
+  for (const { id } of testWorkspaces) {
+    db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE workspace_id = ?)').run(id);
+    db.prepare('DELETE FROM conversations WHERE workspace_id = ?').run(id);
+    db.prepare('DELETE FROM documents WHERE workspace_id = ?').run(id);
+    db.prepare('DELETE FROM workspaces WHERE id = ?').run(id);
+    const wsPath = path.join(DATA_DIR, 'workspaces', id);
+    try { fs.rmSync(wsPath, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+}
+
 async function apiAlive() {
   try {
     const res = await fetch(`${API}/meta`);
@@ -54,6 +74,20 @@ describe('auth context', () => {
     });
     assert.equal(ctx.verified, false);
     assert.equal(ctx.role, 'lecturer');
+  });
+
+  it('preserves the active workspace id in jkuat mode', () => {
+    const ctx = parseAccessContext({
+      headers: {
+        'x-veritas-mode': 'jkuat',
+        'x-veritas-role': 'student',
+        'x-veritas-user-id': 'demo-student',
+        'x-veritas-workspace': 'workspace-123',
+      },
+      body: {},
+    });
+    assert.equal(ctx.workspaceId, 'workspace-123');
+    assert.equal(ctx.mode, MODES.JKUAT);
   });
 });
 
@@ -197,6 +231,39 @@ describe('JKUAT timetable workflow (in-process)', () => {
     }
   });
 
+  it('publishes a lecturer draft and sends the new venue to students in notifications', () => {
+    const entry = timetable.listTimetable({ lecturerId: 'demo-lecturer', unitCode: 'ICS2400' })[0];
+    assert.ok(entry, 'demo lecturer should have an Operating Systems timetable entry');
+
+    const change = timetable.proposeChange('demo-lecturer', {
+      entryId: entry.id,
+      proposedDay: 'Thursday',
+      proposedStart: '12:00',
+      proposedEnd: '14:00',
+      proposedVenueId: 'v-hallA',
+      reason: 'Move to the main hall for equipment access',
+    });
+    assert.equal(change.status, 'draft');
+
+    const published = timetable.publishChange(change.id, 'demo-lecturer', { allowDirectPublish: true });
+    assert.equal(published.change.status, 'published');
+    assert.equal(published.entry.venue_id, 'v-hallA');
+
+    const studentSchedule = timetable.listTimetable({ studentGroup: entry.student_group }).find((row) => row.id === entry.id);
+    assert.equal(studentSchedule.venue_id, 'v-hallA');
+
+    const studentNotifications = timetable.listNotifications({ studentGroup: entry.student_group });
+    const venueNotification = studentNotifications.find((n) => {
+      if (n.kind !== 'schedule_change') return false;
+      try {
+        const meta = JSON.parse(n.meta_json || 'null');
+        return meta?.next?.venue === 'Hall A';
+      } catch { return false; }
+    });
+    assert.ok(venueNotification, 'student should receive a schedule-change notification with the updated venue');
+    assert.match(venueNotification.body, /Hall A/i);
+  });
+
   it('blocks public timetable via role checks at route layer conceptually', () => {
     const ctx = parseAccessContext({
       headers: { 'x-veritas-mode': 'jkuat', 'x-veritas-role': 'public', 'x-veritas-user-id': 'demo-public' },
@@ -232,10 +299,10 @@ describe('answer sanitization', () => {
           groups: [],
         },
         jkuatVectorStore: {
-          similaritySearch: async () => [{
+          similaritySearchWithScore: async () => [[{
             pageContent: 'Alumni access guidance applies to graduates only.',
             metadata: { source: 'alumni-guide.pdf', allowed_roles: ['alumni'] },
-          }],
+          }, 0.3]],
         },
         conversationHistory: [],
       });
@@ -248,13 +315,13 @@ describe('answer sanitization', () => {
     }
   });
 
-  it('restricts the JKUAT information guide and MCS timetable to student-only access', async () => {
+  it('respects explicit allowed_roles for JKUAT documents instead of forcing student-only access for matching sources', async () => {
     process.env.GROQ_API_KEY = 'test-key';
     const originalPost = axios.post;
-    axios.post = async (...args) => ({ data: { choices: [{ message: { content: 'Student-only answer.' } }] } });
+    axios.post = async (...args) => ({ data: { choices: [{ message: { content: 'Role-aware answer.' } }] } });
 
     try {
-      const denied = await runVeritasQuery({
+      const lecturerAllowed = await runVeritasQuery({
         question: 'What is the fee payment threshold?',
         ctx: {
           mode: MODES.JKUAT,
@@ -263,18 +330,19 @@ describe('answer sanitization', () => {
           groups: [],
         },
         jkuatVectorStore: {
-          similaritySearch: async () => [{
+          similaritySearchWithScore: async () => [[{
             pageContent: 'A student must pay 75% before registering units.',
             metadata: { source: 'JKUAT Information Guide', allowed_roles: ['public', 'student', 'lecturer'] },
-          }],
+          }, 0.3]],
         },
         conversationHistory: [],
       });
 
-      assert.equal(denied.rbacBlocked, true);
-      assert.match(String(denied.answer || ''), /not authorized|access denied|permission/i);
+      assert.equal(lecturerAllowed.rbacBlocked, false);
+      assert.ok(Array.isArray(lecturerAllowed.evidence));
+      assert.ok(String(lecturerAllowed.answer || '').length > 0);
 
-      const allowed = await runVeritasQuery({
+      const studentAllowed = await runVeritasQuery({
         question: 'What is the fee payment threshold?',
         ctx: {
           mode: MODES.JKUAT,
@@ -283,16 +351,163 @@ describe('answer sanitization', () => {
           groups: ['MCS-Y2'],
         },
         jkuatVectorStore: {
-          similaritySearch: async () => [{
+          similaritySearchWithScore: async () => [[{
             pageContent: 'A student must pay 75% before registering units.',
             metadata: { source: 'JKUAT Information Guide', allowed_roles: ['public', 'student'] },
-          }],
+          }, 0.3]],
+        },
+        conversationHistory: [],
+      });
+
+      assert.equal(studentAllowed.rbacBlocked, false);
+      assert.ok(Array.isArray(studentAllowed.evidence));
+      assert.ok(String(studentAllowed.answer || '').length > 0);
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
+  });
+
+  it('allows the expected role set for policy documents across lecturer, staff, public, and student access', async () => {
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+    axios.post = async (...args) => ({ data: { choices: [{ message: { content: 'Role-aware answer.' } }] } });
+
+    try {
+      const cases = [
+        { role: ROLES.LECTURER, metadata: { source: 'Detailed_Staff_and_Lecturer_HR_Policy_Demo.pdf', allowed_roles: ['student'] }, blocked: true },
+        { role: ROLES.STAFF, metadata: { source: 'Detailed_Staff_and_Lecturer_HR_Policy_Demo.pdf', allowed_roles: ['student'] }, blocked: true },
+        { role: ROLES.PUBLIC, metadata: { source: 'Detailed_Staff_and_Lecturer_HR_Policy_Demo.pdf', allowed_roles: ['student'] }, blocked: true },
+        { role: ROLES.STUDENT, metadata: { source: 'Detailed_Staff_and_Lecturer_HR_Policy_Demo.pdf', allowed_roles: ['student'] }, blocked: false },
+      ];
+
+      for (const scenario of cases) {
+        const result = await runVeritasQuery({
+          question: 'tell me about the leave days',
+          ctx: {
+            mode: MODES.JKUAT,
+            role: scenario.role,
+            userId: `demo-${scenario.role}`,
+            groups: scenario.role === ROLES.STUDENT ? ['MCS-Y2'] : [],
+          },
+          jkuatVectorStore: {
+            similaritySearchWithScore: async () => [[{
+              pageContent: 'Annual leave and staff/lecturer policy details.',
+              metadata: scenario.metadata,
+            }, 0.3]],
+          },
+          conversationHistory: [],
+        });
+
+        assert.equal(result.rbacBlocked, scenario.blocked, `role ${scenario.role} should have blocked=${scenario.blocked}`);
+      }
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
+  });
+
+  it('treats empty allowed_roles metadata as restricted — denies all roles until a role is explicitly assigned', async () => {
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+    axios.post = async (...args) => ({ data: { choices: [{ message: { content: 'Role-aware answer.' } }] } });
+
+    try {
+      const result = await runVeritasQuery({
+        question: 'tell me about deeptech',
+        ctx: {
+          mode: MODES.JKUAT,
+          role: ROLES.STUDENT,
+          userId: 'demo-student',
+          groups: ['MCS-Y2'],
+        },
+        jkuatVectorStore: {
+          similaritySearchWithScore: async () => [[{
+            pageContent: 'DeepTech is a technology and innovation hub focused on practical research and commercialisation.',
+            metadata: { source: 'deeptech.txt', allowed_roles: [] },
+          }, 0.3]],
+        },
+        conversationHistory: [],
+      });
+
+      // Empty allowed_roles means no role was assigned → blocked for all roles
+      assert.equal(result.rbacBlocked, true);
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
+  });
+
+  it('uses the stored document role list during ingestion when no explicit override is passed', async () => {
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+    axios.post = async (...args) => ({ data: { choices: [{ message: { content: 'Role-aware answer.' } }] } });
+
+    try {
+      const owner = `demo-admin-${uid()}`;
+      const ws = ensureWorkspace(owner, 'Admin Role Override');
+      const docId = uid();
+      const filePath = path.join(DATA_DIR, 'workspaces', ws.id, 'files', `${docId}.txt`);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, 'Only staff should access this restricted memo.');
+
+      insertDocument({
+        id: docId,
+        workspace_id: ws.id,
+        filename: 'staff-only.txt',
+        format: 'txt',
+        size_bytes: fs.statSync(filePath).size,
+        status: 'uploaded',
+        pages_or_sections: 0,
+        chunk_count: 0,
+        error_message: null,
+        storage_path: filePath,
+        indexed_at: null,
+        allowed_roles: JSON.stringify(['staff']),
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      });
+
+      const doc = await ingestDocument(docId);
+      assert.equal(doc.status, 'ready');
+      assert.equal(doc.allowed_roles, JSON.stringify(['staff']));
+
+      const allowed = await runVeritasQuery({
+        question: 'What does the restricted memo say?',
+        ctx: {
+          mode: MODES.JKUAT,
+          role: ROLES.STAFF,
+          userId: 'demo-staff',
+          groups: [],
+        },
+        jkuatVectorStore: {
+          similaritySearchWithScore: async () => [[{
+            pageContent: 'Only staff should access this restricted memo.',
+            metadata: { source: 'staff-only.txt', allowed_roles: ['staff'] },
+          }, 0.3]],
+        },
+        conversationHistory: [],
+      });
+
+      const blocked = await runVeritasQuery({
+        question: 'What does the restricted memo say?',
+        ctx: {
+          mode: MODES.JKUAT,
+          role: ROLES.STUDENT,
+          userId: 'demo-student',
+          groups: ['MCS-Y2'],
+        },
+        jkuatVectorStore: {
+          similaritySearchWithScore: async () => [[{
+            pageContent: 'Only staff should access this restricted memo.',
+            metadata: { source: 'staff-only.txt', allowed_roles: ['staff'] },
+          }, 0.3]],
         },
         conversationHistory: [],
       });
 
       assert.equal(allowed.rbacBlocked, false);
-      assert.match(String(allowed.answer || ''), /student|75%/i);
+      assert.equal(blocked.rbacBlocked, true);
     } finally {
       axios.post = originalPost;
       delete process.env.GROQ_API_KEY;
@@ -301,6 +516,7 @@ describe('answer sanitization', () => {
 });
 
 describe('role-aware retrieval and audit logging', () => {
+  after(() => purgeTestWorkspaces());
   it('blocks restricted retrieval when the user role is not in allowed_roles and records the audit status', async () => {
     process.env.GROQ_API_KEY = 'test-key';
     const originalPost = axios.post;
@@ -319,10 +535,10 @@ describe('role-aware retrieval and audit logging', () => {
           groups: ['MCS-Y2'],
         },
         jkuatVectorStore: {
-          similaritySearch: async () => [{
+          similaritySearchWithScore: async () => [[{
             pageContent: 'Internal lab policy for lecturers only.',
             metadata: { source: 'lab-policy.pdf', allowed_roles: ['lecturer', 'staff'] },
-          }],
+          }, 0.3]],
         },
         conversationHistory: [],
       });
@@ -355,10 +571,10 @@ describe('role-aware retrieval and audit logging', () => {
           groups: ['MCS-Y2'],
         },
         jkuatVectorStore: {
-          similaritySearch: async () => [{
+          similaritySearchWithScore: async () => [[{
             pageContent: 'Student notice rules: do not skip attendance.',
             metadata: { source: 'student-rules.pdf', allowed_roles: ['student'] },
-          }],
+          }, 0.3]],
         },
         conversationHistory: [],
       });
@@ -390,10 +606,10 @@ describe('role-aware retrieval and audit logging', () => {
           groups: ['MCS-Y2'],
         },
         jkuatVectorStore: {
-          similaritySearch: async () => [{
+          similaritySearchWithScore: async () => [[{
             pageContent: 'Student notice rules: do not skip attendance.',
             metadata: { source: 'student-rules.pdf', allowed_roles: ['student'] },
-          }],
+          }, 0.3]],
         },
         conversationHistory: [],
       });
@@ -401,6 +617,37 @@ describe('role-aware retrieval and audit logging', () => {
       assert.equal(result.rbacBlocked, false);
       assert.ok(String(result.answer || '').length > 0);
       assert.ok(Array.isArray(result.evidence));
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
+  });
+
+  it('accepts allowed_roles stored as a JSON string when checking a matching role', async () => {
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+    axios.post = async (...args) => ({ data: { choices: [{ message: { content: 'Allowed answer.' } }] } });
+    try {
+      const result = await runVeritasQuery({
+        question: 'What is the lecturer attendance policy?',
+        ctx: {
+          mode: MODES.JKUAT,
+          role: ROLES.LECTURER,
+          userId: 'demo-lecturer',
+          groups: ['MCS-Y2'],
+        },
+        jkuatVectorStore: {
+          similaritySearchWithScore: async () => [[{
+            pageContent: 'Lecturer attendance policy requires review before Friday.',
+            metadata: { source: 'lecturer-policy.txt', allowed_roles: '["lecturer","staff"]' },
+          }, 0.3]],
+        },
+        conversationHistory: [],
+      });
+
+      assert.equal(result.rbacBlocked, false);
+      assert.ok(Array.isArray(result.evidence));
+      assert.ok(String(result.answer || '').length > 0);
     } finally {
       axios.post = originalPost;
       delete process.env.GROQ_API_KEY;
@@ -490,6 +737,7 @@ describe('date-aware temporal filtering', () => {
 });
 
 describe('Generic RAG workspace isolation (in-process)', () => {
+  after(() => purgeTestWorkspaces());
   it('ingests a DOCX, extracts readable text, keeps it retrievable, and removes it on delete', async () => {
     const owner = `test-owner-docx-${uid().slice(0, 8)}`;
     const ws = ensureWorkspace(owner, 'WS-DOCX');

@@ -302,12 +302,15 @@ export async function renderAssistant(root, presetQ = '') {
           ><i class="fas fa-microphone" aria-hidden="true"></i></button>
         </div>
         <div id="voice-status" class="voice-status" aria-live="polite" aria-atomic="true"></div>
-        <div id="voice-playback" class="voice-playback" hidden>
-          <button type="button" class="btn btn-ghost btn-sm" id="replay-btn" aria-label="Replay last voice answer">
+        <div id="voice-playback" class="voice-playback">
+          <button type="button" class="btn btn-ghost btn-sm" id="replay-btn" aria-label="Replay last voice answer" style="display:none">
             <i class="fas fa-rotate-left" aria-hidden="true"></i> Repeat
           </button>
-          <button type="button" class="btn btn-ghost btn-sm" id="stop-btn" aria-label="Stop audio playback">
+          <button type="button" class="btn btn-ghost btn-sm" id="stop-btn" aria-label="Stop audio playback" style="display:none">
             <i class="fas fa-stop" aria-hidden="true"></i> Stop
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" id="test-speech-btn" aria-label="Test browser speech synthesis">
+            🔊 Test Speech
           </button>
         </div>
       </div>
@@ -577,6 +580,19 @@ export async function renderAssistant(root, presetQ = '') {
   /** @type {AudioContext|null} */
   let audioCtx = null;
 
+  // Create AudioContext eagerly on first user interaction so it's never
+  // suspended when we try to play audio after the async server round-trip.
+  function ensureAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new AudioContext();
+    }
+    // Chrome suspends AudioContext if the page loses focus; resume it.
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  }
+
   function setVoiceStatus(msg, isError = false) {
     voiceStatus.textContent = msg;
     voiceStatus.className = `voice-status${isError ? ' voice-status--error' : ''}`;
@@ -596,53 +612,101 @@ export async function renderAssistant(root, presetQ = '') {
    */
   async function playAnswer(audioBase64, fallbackText) {
     stopPlayback();
-    voicePlayback.hidden = false;
+    // Reveal Repeat and Stop buttons on first use
+    const repeatBtn2 = root.querySelector('#replay-btn');
+    const stopBtn2   = root.querySelector('#stop-btn');
+    if (repeatBtn2) repeatBtn2.style.display = '';
+    if (stopBtn2)   stopBtn2.style.display   = '';
 
     if (audioBase64) {
+      setVoiceStatus('🔊 Decoding audio from server…');
       try {
-        if (!audioCtx) audioCtx = new AudioContext();
+        const ctx = ensureAudioContext();
+        if (ctx.state !== 'running') {
+          await ctx.resume();
+        }
         const binary = atob(audioBase64);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const decoded = await audioCtx.decodeAudioData(bytes.buffer);
+        const decoded = await ctx.decodeAudioData(bytes.buffer.slice(0));
         lastAudio = decoded;
-        currentSource = audioCtx.createBufferSource();
+        currentSource = ctx.createBufferSource();
         currentSource.buffer = decoded;
-        currentSource.connect(audioCtx.destination);
+        currentSource.connect(ctx.destination);
         currentSource.start();
-        currentSource.onended = () => { currentSource = null; };
+        currentSource.onended = () => { currentSource = null; setVoiceStatus(''); };
+        setVoiceStatus('🔊 Speaking…');
         return;
       } catch (err) {
-        console.warn('[voice] Web Audio playback failed, using speechSynthesis:', err.message);
+        console.warn('[voice] Web Audio playback failed, falling back to speechSynthesis:', err.message);
+        setVoiceStatus('⚠️ Web Audio failed — trying browser speech…');
       }
     }
 
-    // Browser TTS fallback
-    if ('speechSynthesis' in window && fallbackText) {
-      const utt = new SpeechSynthesisUtterance(fallbackText);
-      utt.lang = 'en';
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utt);
+    // ── speechSynthesis fallback ────────────────────────────────────────────
+    if (!('speechSynthesis' in window)) {
+      setVoiceStatus('⚠️ Your browser does not support speech. No audio.', true);
+      return;
     }
+    if (!fallbackText) {
+      setVoiceStatus('⚠️ No text to speak.', true);
+      return;
+    }
+
+    setVoiceStatus('🔊 Using browser speech…');
+    // Only cancel if already speaking — calling cancel() on an idle Brave engine
+    // poisons the queue and causes synthesis-failed on the next speak().
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      window.speechSynthesis.cancel();
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    const utt = new SpeechSynthesisUtterance(fallbackText);
+    utt.lang = 'en-US';
+    utt.rate = 0.95;
+    utt.volume = 1;
+    utt.onstart  = () => setVoiceStatus('🔊 Speaking…');
+    utt.onend    = () => setVoiceStatus('✅ Done speaking.');
+    utt.onerror  = (e) => {
+      if (e.error !== 'interrupted') {
+        setVoiceStatus(`⚠️ Speech error: ${e.error}`, true);
+        console.error('[voice] speechSynthesis error:', e);
+      }
+    };
+
+    // Ensure voices are loaded before speaking (Chromium populates them async)
+    if (window.speechSynthesis.getVoices().length === 0) {
+      await new Promise((r) => {
+        window.speechSynthesis.onvoiceschanged = r;
+        setTimeout(r, 1000);
+      });
+    }
+
+    window.speechSynthesis.speak(utt);
   }
 
   replayBtn.addEventListener('click', () => {
-    if (lastAudio && audioCtx) {
+    if (lastAudio) {
       stopPlayback();
-      currentSource = audioCtx.createBufferSource();
+      const ctx = ensureAudioContext();
+      currentSource = ctx.createBufferSource();
       currentSource.buffer = lastAudio;
-      currentSource.connect(audioCtx.destination);
+      currentSource.connect(ctx.destination);
       currentSource.start();
-      currentSource.onended = () => { currentSource = null; };
+      currentSource.onended = () => { currentSource = null; setVoiceStatus(''); };
+      setVoiceStatus('🔊 Speaking…');
     } else if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      // Re-speak the last assistant bubble
       const bubbles = thread.querySelectorAll('.bubble.assistant');
       const last = bubbles[bubbles.length - 1];
       if (last) {
         const utt = new SpeechSynthesisUtterance(last.textContent || '');
         utt.lang = 'en';
-        window.speechSynthesis.speak(utt);
+        utt.rate = 0.95;
+        utt.onstart = () => setVoiceStatus('🔊 Speaking…');
+        utt.onend = () => setVoiceStatus('');
+        setTimeout(() => window.speechSynthesis.speak(utt), 80);
+        setVoiceStatus('🔊 Speaking…');
       }
     }
   });
@@ -651,6 +715,63 @@ export async function renderAssistant(root, presetQ = '') {
     stopPlayback();
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     setVoiceStatus('');
+  });
+
+  // Quick smoke-test: click this to verify browser speech works independently
+  // of the recording/server flow.  Stays visible for easy debugging.
+  const testSpeechBtn = root.querySelector('#test-speech-btn');
+  testSpeechBtn.addEventListener('click', () => {
+    if (!('speechSynthesis' in window)) {
+      setVoiceStatus('⚠️ speechSynthesis not supported in this browser.', true);
+      return;
+    }
+    setVoiceStatus('🔊 Starting speech test…');
+    // Brave/Chromium: never call cancel() before the very first speak() —
+    // it poisons the synthesis queue and causes synthesis-failed.
+    // Only cancel if something is already speaking.
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      window.speechSynthesis.cancel();
+    }
+
+    function doSpeak() {
+      const utt = new SpeechSynthesisUtterance('Hello, this is a speech test from VeritasRAG.');
+      utt.lang = 'en-US';
+      utt.volume = 1;
+      utt.onstart = () => setVoiceStatus('🔊 Test speaking…');
+      utt.onend   = () => setVoiceStatus('✅ Speech test complete. If you heard that, voice is working.');
+      utt.onerror = (e) => {
+        if (e.error === 'synthesis-failed' || e.error === 'synthesis-unavailable') {
+          // Chromium blocks TTS without a loaded voice — wait for voices then retry once
+          const voices = window.speechSynthesis.getVoices();
+          if (!voices.length) {
+            window.speechSynthesis.onvoiceschanged = () => {
+              window.speechSynthesis.onvoiceschanged = null;
+              window.speechSynthesis.speak(utt);
+            };
+          } else {
+            setVoiceStatus('⚠️ Speech unavailable in this browser profile.', true);
+          }
+        } else if (e.error !== 'interrupted') {
+          setVoiceStatus(`⚠️ Speech test error: ${e.error}`, true);
+        }
+      };
+      window.speechSynthesis.speak(utt);
+    }
+
+    // Wait for voices to be populated (Chromium loads them async on first call)
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length) {
+      doSpeak();
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null;
+        doSpeak();
+      };
+      // Fallback if onvoiceschanged never fires (some Brave versions)
+      setTimeout(() => {
+        if (window.speechSynthesis.getVoices().length) doSpeak();
+      }, 500);
+    }
   });
 
   /**
@@ -674,55 +795,58 @@ export async function renderAssistant(root, presetQ = '') {
 
   async function startRecording() {
     if (mediaRecorder) return; // already recording
+    // Create / resume AudioContext inside the gesture handler so Chrome
+    // never treats it as suspended when we play back the answer later.
+    ensureAudioContext();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      // Request mono 16 kHz directly — avoids MediaRecorder → webm → decode
+      // pipeline which can corrupt samples on some Chromium builds.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, sampleRate: 16000, echoCancellation: true, noiseSuppression: true },
+        video: false,
+      });
       setVoiceStatus('● Recording… release to send', false);
       micBtn.setAttribute('aria-pressed', 'true');
       micBtn.classList.add('recording');
 
-      /** @type {BlobPart[]} */
-      const chunks = [];
-      const mr = new MediaRecorder(stream);
-      mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      mr.start(100); // collect in 100 ms slices
-      mediaRecorder = mr;
+      // Capture raw Float32 PCM via ScriptProcessorNode (universally supported)
+      const captureCtx = new AudioContext({ sampleRate: 16000 });
+      const source = captureCtx.createMediaStreamSource(stream);
+      const bufSize = 4096;
+      const processor = captureCtx.createScriptProcessor(bufSize, 1, 1);
+      const pcmChunks = [];
+      processor.onaudioprocess = (e) => {
+        // Copy — the buffer is reused after this callback
+        pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+      source.connect(processor);
+      processor.connect(captureCtx.destination);
+      // Store refs so the stop handler can clean up
+      mediaRecorder = { _captureCtx: captureCtx, _processor: processor, _source: source, _stream: stream };
 
-      mr.onstop = async () => {
+      // Triggered when the user releases the mic button (see stopRecording below)
+      mediaRecorder._stop = async () => {
+        processor.disconnect();
+        source.disconnect();
+        captureCtx.close();
         stream.getTracks().forEach((t) => t.stop());
         micBtn.setAttribute('aria-pressed', 'false');
         micBtn.classList.remove('recording');
         mediaRecorder = null;
 
-        if (!chunks.length) {
+        if (!pcmChunks.length) {
           setVoiceStatus('No audio captured.', true);
           return;
         }
 
         setVoiceStatus('Processing…');
         try {
-          // Decode the recorded blob via Web Audio
-          const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
-          const arrayBuf = await blob.arrayBuffer();
-          const tmpCtx = new AudioContext();
-          const audioBuf = await tmpCtx.decodeAudioData(arrayBuf);
-          tmpCtx.close();
-
-          // Mix down to mono
-          const monoSamples = (() => {
-            const ch = audioBuf.numberOfChannels;
-            const len = audioBuf.length;
-            if (ch === 1) return audioBuf.getChannelData(0);
-            const out = new Float32Array(len);
-            for (let c = 0; c < ch; c++) {
-              const data = audioBuf.getChannelData(c);
-              for (let i = 0; i < len; i++) out[i] += data[i];
-            }
-            for (let i = 0; i < len; i++) out[i] /= ch;
-            return out;
-          })();
-
-          // Resample to 16 kHz
-          const samples16k = await resampleTo16k(monoSamples, audioBuf.sampleRate);
+          // Merge chunks and resample if the browser ignored our sampleRate hint
+          const totalLen = pcmChunks.reduce((s, c) => s + c.length, 0);
+          const merged = new Float32Array(totalLen);
+          let offset = 0;
+          for (const chunk of pcmChunks) { merged.set(chunk, offset); offset += chunk.length; }
+          const samples16k = await resampleTo16k(merged, captureCtx.sampleRate);
 
           setVoiceStatus('Sending to server…');
           const result = await api.voiceAsk(samples16k);
@@ -763,7 +887,9 @@ export async function renderAssistant(root, presetQ = '') {
   }
 
   function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    if (mediaRecorder && mediaRecorder._stop) {
+      mediaRecorder._stop();
+    } else if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();
     }
   }

@@ -1,6 +1,16 @@
 import { api, getApiBase } from './api.js';
 import { state, setRole, getAvailableRoles } from './state.js';
 import { toast } from './toast.js';
+// Imported lazily to avoid a circular dependency — app.js imports views.js
+// via renderAssistant, so we use a dynamic import inside the function.
+async function refreshSidebarHistory() {
+  try {
+    const { renderSidebarHistory } = await import('./app.js');
+    await renderSidebarHistory();
+  } catch {
+    // non-fatal — sidebar just won't update until next navigation
+  }
+}
 
 function roleDisplayName(role) {
   const normalized = String(role || '').toLowerCase();
@@ -503,6 +513,7 @@ export async function renderAssistant(root, presetQ = '') {
     thread.appendChild(loading);
     try {
       const res = await api.ask(question, state.conversationId);
+      const isNewConversation = !state.conversationId || state.conversationId !== res.conversationId;
       state.conversationId = res.conversationId;
       loading.remove();
       const bubble = addBubble('assistant', res.answer);
@@ -529,6 +540,8 @@ export async function renderAssistant(root, presetQ = '') {
       followups.querySelectorAll('button').forEach((b) => {
         b.addEventListener('click', () => ask(b.dataset.f));
       });
+      // Refresh sidebar so the new (or active) conversation appears immediately
+      refreshSidebarHistory();
     } catch (err) {
       loading.remove();
       addBubble('assistant', `Error: ${err.message}`);
@@ -718,9 +731,16 @@ export async function renderAssistant(root, presetQ = '') {
           addBubble('user', `🎙️ ${result.question}`);
           const bubble = addBubble('assistant', result.answer);
 
-          // Show evidence if the full /ask result is augmented (voice/ask returns
-          // question + answer + audioBase64; evidence not returned to keep payload small)
+          // Persist the conversation id so follow-up typed questions
+          // can continue from the same conversation thread
+          if (result.conversationId) {
+            state.conversationId = result.conversationId;
+          }
+
           setVoiceStatus(`Transcribed: "${result.question}"`);
+
+          // Refresh sidebar so the voice conversation appears immediately
+          refreshSidebarHistory();
 
           // Play back the answer
           await playAnswer(result.audioBase64, stripMarkdownForSpeech(result.answer));

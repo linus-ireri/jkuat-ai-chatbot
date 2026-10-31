@@ -134,4 +134,36 @@ export const api = {
     }),
   cancelChange: (id) => request(`/jkuat/schedule-changes/${id}/cancel`, { method: 'POST' }),
   freshness: () => request('/admin/freshness'),
+
+  /**
+   * Send raw Float32 PCM audio (16 kHz mono) to the voice endpoint.
+   * The server transcribes, runs the full RAG pipeline, and returns TTS audio.
+   *
+   * @param {Float32Array} samples  16 kHz mono Float32 PCM
+   * @returns {Promise<{question: string, answer: string, audioBase64: string|null}>}
+   */
+  voiceAsk(samples) {
+    const url = `${getApiBase()}/voice/ask`;
+    const buffer = samples.buffer.slice(
+      samples.byteOffset,
+      samples.byteOffset + samples.byteLength
+    );
+    return fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        ...headers({ 'Content-Type': 'application/octet-stream' }),
+      },
+      body: buffer,
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(data.error || res.statusText || 'Voice request failed');
+        err.status = res.status;
+        err.data = data;
+        throw err;
+      }
+      return data;
+    });
+  },
 };

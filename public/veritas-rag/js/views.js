@@ -277,11 +277,28 @@ export async function renderAssistant(root, presetQ = '') {
           <span id="support-slot"></span>
         </div>
         <p class="sub" style="margin-top:0">${state.mode === 'generic' ? 'Grounded in your workspace documents.' : `JKUAT mode · demo role: ${esc(state.role)}`}</p>
-        <div class="chat-thread" id="thread" aria-live="polite"></div>
+        <div class="chat-thread" id="thread" aria-live="polite" aria-label="Conversation"></div>
         <div class="followups" id="followups"></div>
         <div class="chat-composer">
-          <textarea id="q" rows="2" placeholder="Ask a grounded question…"></textarea>
-          <button type="button" class="btn btn-primary" id="send">Ask</button>
+          <textarea id="q" rows="2" placeholder="Ask a grounded question…" aria-label="Type your question"></textarea>
+          <button type="button" class="btn btn-primary" id="send" aria-label="Send typed question">Ask</button>
+          <button
+            type="button"
+            class="btn btn-voice"
+            id="mic-btn"
+            aria-label="Hold to record voice question (or hold Space)"
+            aria-pressed="false"
+            title="Hold to record — release to send"
+          ><i class="fas fa-microphone" aria-hidden="true"></i></button>
+        </div>
+        <div id="voice-status" class="voice-status" aria-live="polite" aria-atomic="true"></div>
+        <div id="voice-playback" class="voice-playback" hidden>
+          <button type="button" class="btn btn-ghost btn-sm" id="replay-btn" aria-label="Replay last voice answer">
+            <i class="fas fa-rotate-left" aria-hidden="true"></i> Repeat
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" id="stop-btn" aria-label="Stop audio playback">
+            <i class="fas fa-stop" aria-hidden="true"></i> Stop
+          </button>
         </div>
       </div>
       <aside class="panel evidence-panel" id="citation-drawer" aria-live="polite">
@@ -530,6 +547,243 @@ export async function renderAssistant(root, presetQ = '') {
     loadConversationThread();
   }
   if (presetQ) ask(presetQ);
+
+  // ── Voice push-to-talk ────────────────────────────────────────────────────
+  const micBtn = root.querySelector('#mic-btn');
+  const voiceStatus = root.querySelector('#voice-status');
+  const voicePlayback = root.querySelector('#voice-playback');
+  const replayBtn = root.querySelector('#replay-btn');
+  const stopBtn = root.querySelector('#stop-btn');
+
+  /** @type {MediaRecorder|null} */
+  let mediaRecorder = null;
+  /** @type {AudioBuffer|null} */
+  let lastAudio = null;
+  /** @type {AudioBufferSourceNode|null} */
+  let currentSource = null;
+  /** @type {AudioContext|null} */
+  let audioCtx = null;
+
+  function setVoiceStatus(msg, isError = false) {
+    voiceStatus.textContent = msg;
+    voiceStatus.className = `voice-status${isError ? ' voice-status--error' : ''}`;
+  }
+
+  /** Stop any currently-playing audio */
+  function stopPlayback() {
+    if (currentSource) {
+      try { currentSource.stop(); } catch { /* already stopped */ }
+      currentSource = null;
+    }
+  }
+
+  /**
+   * Play a WAV audio buffer (Base64-encoded) from the server, or fall back
+   * to the Web Speech API for the given text.
+   */
+  async function playAnswer(audioBase64, fallbackText) {
+    stopPlayback();
+    voicePlayback.hidden = false;
+
+    if (audioBase64) {
+      try {
+        if (!audioCtx) audioCtx = new AudioContext();
+        const binary = atob(audioBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const decoded = await audioCtx.decodeAudioData(bytes.buffer);
+        lastAudio = decoded;
+        currentSource = audioCtx.createBufferSource();
+        currentSource.buffer = decoded;
+        currentSource.connect(audioCtx.destination);
+        currentSource.start();
+        currentSource.onended = () => { currentSource = null; };
+        return;
+      } catch (err) {
+        console.warn('[voice] Web Audio playback failed, using speechSynthesis:', err.message);
+      }
+    }
+
+    // Browser TTS fallback
+    if ('speechSynthesis' in window && fallbackText) {
+      const utt = new SpeechSynthesisUtterance(fallbackText);
+      utt.lang = 'en';
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utt);
+    }
+  }
+
+  replayBtn.addEventListener('click', () => {
+    if (lastAudio && audioCtx) {
+      stopPlayback();
+      currentSource = audioCtx.createBufferSource();
+      currentSource.buffer = lastAudio;
+      currentSource.connect(audioCtx.destination);
+      currentSource.start();
+      currentSource.onended = () => { currentSource = null; };
+    } else if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      // Re-speak the last assistant bubble
+      const bubbles = thread.querySelectorAll('.bubble.assistant');
+      const last = bubbles[bubbles.length - 1];
+      if (last) {
+        const utt = new SpeechSynthesisUtterance(last.textContent || '');
+        utt.lang = 'en';
+        window.speechSynthesis.speak(utt);
+      }
+    }
+  });
+
+  stopBtn.addEventListener('click', () => {
+    stopPlayback();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setVoiceStatus('');
+  });
+
+  /**
+   * Resample a Float32Array from `fromRate` to `toRate` (16 000 Hz) using
+   * the OfflineAudioContext so we always send the right sample rate to Whisper.
+   */
+  async function resampleTo16k(inputSamples, fromRate) {
+    if (fromRate === 16000) return inputSamples;
+    const duration = inputSamples.length / fromRate;
+    const outLength = Math.ceil(duration * 16000);
+    const ctx = new OfflineAudioContext(1, outLength, 16000);
+    const buf = ctx.createBuffer(1, inputSamples.length, fromRate);
+    buf.copyToChannel(inputSamples, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+    const rendered = await ctx.startRendering();
+    return rendered.getChannelData(0);
+  }
+
+  async function startRecording() {
+    if (mediaRecorder) return; // already recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      setVoiceStatus('● Recording… release to send', false);
+      micBtn.setAttribute('aria-pressed', 'true');
+      micBtn.classList.add('recording');
+
+      /** @type {BlobPart[]} */
+      const chunks = [];
+      const mr = new MediaRecorder(stream);
+      mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      mr.start(100); // collect in 100 ms slices
+      mediaRecorder = mr;
+
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        micBtn.setAttribute('aria-pressed', 'false');
+        micBtn.classList.remove('recording');
+        mediaRecorder = null;
+
+        if (!chunks.length) {
+          setVoiceStatus('No audio captured.', true);
+          return;
+        }
+
+        setVoiceStatus('Processing…');
+        try {
+          // Decode the recorded blob via Web Audio
+          const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
+          const arrayBuf = await blob.arrayBuffer();
+          const tmpCtx = new AudioContext();
+          const audioBuf = await tmpCtx.decodeAudioData(arrayBuf);
+          tmpCtx.close();
+
+          // Mix down to mono
+          const monoSamples = (() => {
+            const ch = audioBuf.numberOfChannels;
+            const len = audioBuf.length;
+            if (ch === 1) return audioBuf.getChannelData(0);
+            const out = new Float32Array(len);
+            for (let c = 0; c < ch; c++) {
+              const data = audioBuf.getChannelData(c);
+              for (let i = 0; i < len; i++) out[i] += data[i];
+            }
+            for (let i = 0; i < len; i++) out[i] /= ch;
+            return out;
+          })();
+
+          // Resample to 16 kHz
+          const samples16k = await resampleTo16k(monoSamples, audioBuf.sampleRate);
+
+          setVoiceStatus('Sending to server…');
+          const result = await api.voiceAsk(samples16k);
+
+          // Show question and answer in the thread
+          addBubble('user', `🎙️ ${result.question}`);
+          const bubble = addBubble('assistant', result.answer);
+
+          // Show evidence if the full /ask result is augmented (voice/ask returns
+          // question + answer + audioBase64; evidence not returned to keep payload small)
+          setVoiceStatus(`Transcribed: "${result.question}"`);
+
+          // Play back the answer
+          await playAnswer(result.audioBase64, stripMarkdownForSpeech(result.answer));
+        } catch (err) {
+          setVoiceStatus(err.message || 'Voice request failed', true);
+          toast(err.message || 'Voice request failed', true);
+        }
+      };
+    } catch (err) {
+      setVoiceStatus(
+        err.name === 'NotAllowedError'
+          ? 'Microphone access denied. Allow it in browser settings.'
+          : `Microphone error: ${err.message}`,
+        true
+      );
+      micBtn.setAttribute('aria-pressed', 'false');
+      micBtn.classList.remove('recording');
+      mediaRecorder = null;
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+  }
+
+  // Simple helper for speech stripping in the fallback TTS path
+  function stripMarkdownForSpeech(text) {
+    return String(text || '')
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`[^`]*`/g, '')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+      .replace(/_{1,2}([^_]+)_{1,2}/g, '$1')
+      .replace(/^[-*+]\s+/gm, '')
+      .replace(/^\d+\.\s+/gm, '')
+      .replace(/\|/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  // ── Mouse / touch: hold to record ──────────────────────────────────────────
+  micBtn.addEventListener('mousedown', (e) => { e.preventDefault(); startRecording(); });
+  micBtn.addEventListener('mouseup', stopRecording);
+  micBtn.addEventListener('mouseleave', stopRecording);
+  micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); }, { passive: false });
+  micBtn.addEventListener('touchend', stopRecording);
+  micBtn.addEventListener('touchcancel', stopRecording);
+
+  // ── Keyboard: hold Space to record (only when mic button has focus) ─────────
+  // Also global Space when mic button has focus via tab
+  micBtn.addEventListener('keydown', (e) => {
+    if (e.key === ' ' && !e.repeat) {
+      e.preventDefault();
+      startRecording();
+    }
+  });
+  micBtn.addEventListener('keyup', (e) => {
+    if (e.key === ' ') stopRecording();
+  });
 }
 
 export async function renderTimetable(root) {

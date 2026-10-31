@@ -196,7 +196,106 @@ jkuat-ai-chatbot/
 
 ---
 
-## Environment Variables
+## Voice Input and Output
+
+The assistant supports a **push-to-talk voice interface** in the VeritasRAG UI. You can hold the microphone button (or hold **Space** when the mic button is focused) to record, then release to send. The server transcribes your speech with Whisper, runs it through the same RAG + RBAC pipeline as typed questions, and returns a spoken reply using Piper TTS.
+
+### How it works
+
+1. Browser records audio via `MediaRecorder`
+2. Audio is mixed to mono, resampled to 16 kHz, and sent as raw `Float32LE` PCM to `POST /veritas-rag/voice/ask`
+3. Server transcribes with **Whisper** (`Xenova/whisper-base.en`, loaded once at startup)
+4. The transcribed text passes through the same `runVeritasQuery()` function as typed questions — identical RBAC checks and audit logging apply
+5. Server converts the answer to speech using **Piper** (if configured) and returns it as base64 WAV
+6. Browser plays the WAV via Web Audio API, or falls back to `speechSynthesis` if Piper is not configured
+
+### Model download — Whisper
+
+Whisper is downloaded automatically from Hugging Face on first server startup. No manual download is needed. The model is cached in the default Hugging Face cache directory (`~/.cache/huggingface` or the `HF_CACHE_DIR` env var).
+
+The default model is `Xenova/whisper-base.en` (~150 MB). It runs on CPU and is fast enough for 30-second clips.
+
+To use a larger model (higher accuracy, slower startup):
+
+```env
+WHISPER_MODEL=Xenova/whisper-small.en
+```
+
+### Piper TTS setup (optional)
+
+Piper is an open-source neural TTS engine. Server-side speech synthesis is optional — if it is not configured the browser uses `speechSynthesis`.
+
+**Install Piper:**
+
+```bash
+# Linux x86_64 — download a release from:
+# https://github.com/rhasspy/piper/releases
+wget https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_linux_x86_64.tar.gz
+tar xf piper_linux_x86_64.tar.gz
+sudo cp piper/piper /usr/local/bin/piper
+```
+
+**Download a voice model:**
+
+```bash
+# Example: English (US), medium quality, Lessac voice
+mkdir -p /opt/piper/models
+wget -P /opt/piper/models \
+  https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx \
+  https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+```
+
+Browse all available voices at: https://huggingface.co/rhasspy/piper-voices
+
+**Set environment variables:**
+
+```env
+PIPER_BINARY=piper
+PIPER_MODEL=/opt/piper/models/en_US-lessac-medium.onnx
+```
+
+### Voice endpoint
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/veritas-rag/voice/ask` | Transcribe audio → RAG query → TTS reply |
+
+**Request:**
+- `Content-Type: application/octet-stream`
+- Body: raw Float32LE PCM, 16 kHz, mono, max 30 s / 2 MB
+- Headers: same `X-Veritas-*` headers as typed `/ask`
+
+**Response:**
+```json
+{
+  "question": "When is the library open?",
+  "answer": "The library is open Monday to Friday...",
+  "audioBase64": "<base64-encoded WAV or null>"
+}
+```
+
+`audioBase64` is `null` when Piper is not configured or fails. The browser falls back to `speechSynthesis` automatically.
+
+### UI controls
+
+The mic button appears in the AI Assistant view next to the **Ask** button:
+
+- **Hold** the button (or hold **Space** when it is focused) to record
+- **Release** to send
+- **Repeat** button — replay the last spoken answer
+- **Stop** button — stop playback immediately
+- Typed input continues to work as before
+
+### Security
+
+- Role and userId are taken **only** from server-side context (`X-Veritas-*` headers read at the Express layer) — never from the request body
+- Voice queries go through the same RBAC filter as typed questions
+- Blocked voice queries are logged to `audit_events` with `action = 'voice.ask.rejected'`
+- Audio is **not stored** — it is transcribed in memory and discarded
+
+---
+
+
 
 Create a `.env` file in the project root.
 
@@ -205,6 +304,11 @@ GROQ_API_KEY=your_groq_api_key_here
 PORT=3001
 RAG_SERVER_URL=http://localhost:3001
 WHATSAPP_VERIFY_TOKEN=optional
+
+# Voice I/O (optional — see Voice Input and Output section above)
+WHISPER_MODEL=Xenova/whisper-base.en
+PIPER_BINARY=piper
+PIPER_MODEL=/opt/piper/models/en_US-lessac-medium.onnx
 ```
 
 ### Required variables
@@ -216,6 +320,10 @@ WHATSAPP_VERIFY_TOKEN=optional
 - `PORT`: defaults to `3001`
 - `RAG_SERVER_URL`: used by some Netlify or proxy scenarios
 - `WHATSAPP_VERIFY_TOKEN`: only if WhatsApp webhook logic is being used
+- `WHISPER_MODEL`: Hugging Face model ID for ASR (default: `Xenova/whisper-base.en`, auto-downloaded on first startup)
+- `PIPER_BINARY`: name or full path of the Piper binary (default: `piper`)
+- `PIPER_MODEL`: absolute path to the Piper `.onnx` voice model; leave blank to disable server TTS and use browser `speechSynthesis`
+- `HF_CACHE_DIR`: override the Hugging Face model cache directory
 
 ---
 
@@ -285,6 +393,7 @@ These are preserved for compatibility with the earlier chatbot build:
 | DELETE | `/veritas-rag/documents/:id` | delete a document and its index |
 | POST | `/veritas-rag/documents/:id/reindex` | reindex a document |
 | POST | `/veritas-rag/ask` | grounded question answering |
+| POST | `/veritas-rag/voice/ask` | voice question (Float32 PCM → transcribe → RAG → TTS) |
 | GET | `/veritas-rag/conversations` | list conversations |
 | GET | `/veritas-rag/conversations/:id` | fetch a conversation history |
 | GET | `/veritas-rag/admin/audit` | audit/security trail |
@@ -474,6 +583,10 @@ The test suite covers:
 - RBAC document protection
 - answer sanitization
 - generic RAG ingestion and deletion
+- voice: `stripMarkdownForSpeech` output validation
+- voice: Piper TTS fallback when `PIPER_MODEL` is unset
+- voice: student voice request for lecturer-only content is refused and audited
+- voice: typed and spoken questions return the same answer for the same role
 
 ---
 

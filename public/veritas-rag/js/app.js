@@ -65,7 +65,7 @@ function renderNav(activePage) {
     </a>`).join('');
 }
 
-async function renderSidebarHistory() {
+export async function renderSidebarHistory() {
   const host = document.getElementById('history-panel');
   if (!host) return;
 

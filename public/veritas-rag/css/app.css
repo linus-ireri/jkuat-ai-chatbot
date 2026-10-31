@@ -603,3 +603,112 @@ table.data tr:last-child td { border-bottom: none; }
   width: 38px; height: 38px; display: grid; place-items: center; cursor: pointer;
 }
 .icon-btn:hover { border-color: var(--brand-2); }
+
+/* ──────────────────────────────────────────────────────────────────
+   Voice input / output controls
+   ────────────────────────────────────────────────────────────────── */
+
+/* Mic button — sits next to the Send button inside .chat-composer */
+.btn-voice {
+  flex-shrink: 0;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-muted);
+  border: 2px solid var(--line);
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  font-size: 1rem;
+}
+
+.btn-voice:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.btn-voice:hover {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-deep);
+}
+
+/* Pulsing ring while recording */
+.btn-voice.recording {
+  background: var(--brand);
+  border-color: var(--brand-deep);
+  color: #fff;
+  box-shadow: 0 0 0 0 var(--brand);
+  animation: voice-pulse 1s ease-out infinite;
+}
+
+@keyframes voice-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(248, 112, 96, 0.6); }
+  70%  { box-shadow: 0 0 0 10px rgba(248, 112, 96, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(248, 112, 96, 0); }
+}
+
+/* High-contrast / forced-colors */
+@media (forced-colors: active) {
+  .btn-voice { border: 2px solid ButtonText; }
+  .btn-voice.recording { background: Highlight; color: HighlightText; }
+}
+
+/* Status line below the composer */
+.voice-status {
+  min-height: 1.4em;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+  margin-top: 0.3rem;
+  padding: 0 0.15rem;
+  transition: color 0.2s;
+}
+
+.voice-status--error {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+/* Repeat / Stop playback buttons row */
+.voice-playback {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.voice-playback .btn {
+  font-size: 0.8rem;
+}
+
+/* Accessibility: large-text mode triggered by user OS preference */
+@media (prefers-reduced-motion: no-preference) {
+  .btn-voice.recording {
+    animation: voice-pulse 1s ease-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-voice.recording {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--brand);
+  }
+}
+
+/* High-contrast dark theme overrides */
+[data-theme='dark'] .btn-voice {
+  background: var(--bg-muted);
+  border-color: var(--line);
+  color: var(--ink-muted);
+}
+
+[data-theme='dark'] .btn-voice.recording {
+  background: var(--brand);
+  border-color: var(--brand-deep);
+  color: #fff;
+}

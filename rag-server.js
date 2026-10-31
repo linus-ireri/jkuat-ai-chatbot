@@ -13,6 +13,7 @@ import { Document } from '@langchain/core/documents';
 
 import { cleanLlmAnswer } from './lib/clean-llm-answer.js';
 import { createVeritasRouter } from './lib/veritas-rag/routes.js';
+import { loadWhisper } from './lib/veritas-rag/voice.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -238,6 +239,13 @@ app.get('/', (req, res) => {
 app.use('/veritas-rag-ui', express.static(path.join(__dirname, 'public', 'veritas-rag')));
 
 loadRAG().then(() => {
+  // Pre-warm Whisper in the background so the first voice request is fast.
+  // Errors here are non-fatal — voice will fail gracefully if the model
+  // can't be loaded (e.g. no internet on first run).
+  loadWhisper().catch((err) => {
+    console.warn('[voice] Whisper pre-warm failed (voice ASR will be unavailable):', err.message);
+  });
+
   app.listen(PORT, () => {
     console.log(`RAG server listening on port ${PORT}`);
     console.log(`VeritasRAG API: http://localhost:${PORT}/veritas-rag/meta`);

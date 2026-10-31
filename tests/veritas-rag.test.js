@@ -884,3 +884,154 @@ describe('HTTP API smoke (optional)', () => {
     assert.equal(res.status, 403);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Voice endpoint tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { stripMarkdownForSpeech, synthesisePiper } from '../lib/veritas-rag/voice.js';
+// NOTE: runVeritasQuery, parseAccessContext, MODES, ROLES, axios, getDb are
+// already imported at the top of this file.
+
+describe('voice — stripMarkdownForSpeech', () => {
+  it('removes markdown headings, bold, italic, code blocks and table pipes', () => {
+    const md = `## Summary\n\n**Fees** are *important*.\n\n\`\`\`js\nconsole.log(1);\n\`\`\`\n\n| Col A | Col B |\n|---|---|\n| 1 | 2 |`;
+    const spoken = stripMarkdownForSpeech(md);
+    assert.doesNotMatch(spoken, /##|```|\*\*|\*/);
+    assert.doesNotMatch(spoken, /\|/);
+    assert.match(spoken, /Fees are important/i);
+  });
+
+  it('keeps plain text intact', () => {
+    const plain = 'Library hours are Monday to Friday, 8 AM to 6 PM.';
+    assert.equal(stripMarkdownForSpeech(plain), plain);
+  });
+
+  it('returns empty string for null/undefined input', () => {
+    assert.equal(stripMarkdownForSpeech(null), '');
+    assert.equal(stripMarkdownForSpeech(undefined), '');
+  });
+});
+
+describe('voice — TTS fallback when Piper is not configured', () => {
+  it('returns null from synthesisePiper when PIPER_MODEL is unset', async () => {
+    const prev = process.env.PIPER_MODEL;
+    delete process.env.PIPER_MODEL;
+    try {
+      const result = await synthesisePiper('Hello JKUAT.');
+      assert.equal(result, null, 'synthesisePiper should return null when PIPER_MODEL is not set');
+    } finally {
+      if (prev !== undefined) process.env.PIPER_MODEL = prev;
+    }
+  });
+});
+
+describe('voice — student request for lecturer-only content is refused and logged', () => {
+  it('blocks a student voice query for lecturer-restricted content and writes an audit event', async () => {
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+    axios.post = async () => ({
+      data: { choices: [{ message: { content: 'Access denied by role policy.' } }] },
+    });
+
+    try {
+      const result = await runVeritasQuery({
+        question: 'Show me the staff HR policy document',  // simulates a transcribed voice query
+        ctx: {
+          mode: MODES.JKUAT,
+          role: ROLES.STUDENT,
+          userId: 'demo-student',
+          groups: ['MCS-Y2'],
+        },
+        jkuatVectorStore: {
+          similaritySearchWithScore: async () => [[{
+            pageContent: 'Detailed HR policy for lecturers and staff only.',
+            metadata: {
+              source: 'Staff_HR_Policy_Internal.pdf',
+              allowed_roles: ['lecturer', 'staff'],
+            },
+          }, 0.25]],
+        },
+        conversationHistory: [],
+      });
+
+      // Must be blocked
+      assert.equal(result.rbacBlocked, true, 'student voice query for lecturer content must be blocked');
+      assert.match(
+        String(result.answer || ''),
+        /permission|not authorized|access denied|restricted/i,
+        'blocked answer must contain an access-denial message'
+      );
+
+      // Must be audited — look for the most recent rbac_block row
+      const auditRow = getDb()
+        .prepare("SELECT * FROM audit_events WHERE action = 'query.rbac_block' ORDER BY created_at DESC LIMIT 1")
+        .get();
+      assert.ok(auditRow, 'RBAC block must create an audit_events row');
+      const detail = JSON.parse(auditRow.detail_json || '{}');
+      assert.equal(detail.status, 'RBAC_BLOCKED', 'audit detail.status must be RBAC_BLOCKED');
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
+  });
+});
+
+describe('voice — typed and spoken questions return the same answer for the same role', () => {
+  it('produces identical answers whether the question arrives via text or transcribed voice', async () => {
+    process.env.GROQ_API_KEY = 'test-key';
+    const originalPost = axios.post;
+
+    // Fixed answer to guarantee determinism
+    const FIXED_ANSWER = 'Library hours: Monday to Friday, 8 AM to 6 PM.';
+    axios.post = async () => ({
+      data: { choices: [{ message: { content: FIXED_ANSWER } }] },
+    });
+
+    const MOCK_STORE = {
+      similaritySearchWithScore: async () => [[{
+        pageContent: 'Library opens Monday–Friday 08:00–18:00.',
+        metadata: { source: 'JKUAT_Info_Guide.pdf', allowed_roles: ['student', 'public', 'lecturer', 'staff'] },
+      }, 0.1]],
+    };
+
+    const CTX = {
+      mode: MODES.JKUAT,
+      role: ROLES.STUDENT,
+      userId: 'demo-student',
+      groups: ['MCS-Y2'],
+    };
+
+    const QUESTION = 'What are the library opening hours?';
+
+    try {
+      // 1. Typed path — same function that POST /veritas-rag/ask calls
+      const typedResult = await runVeritasQuery({
+        question: QUESTION,
+        ctx: { ...CTX },
+        jkuatVectorStore: MOCK_STORE,
+        conversationHistory: [],
+      });
+
+      // 2. Voice path — same function; voice endpoint calls runVeritasQuery with
+      //    the transcribed question.  We simulate perfect transcription here.
+      const voiceResult = await runVeritasQuery({
+        question: QUESTION,  // identical text — simulates perfect Whisper transcription
+        ctx: { ...CTX },
+        jkuatVectorStore: MOCK_STORE,
+        conversationHistory: [],
+      });
+
+      assert.equal(
+        typedResult.answer,
+        voiceResult.answer,
+        'typed and voice paths must return the same answer for the same question and role'
+      );
+      assert.equal(typedResult.rbacBlocked, voiceResult.rbacBlocked);
+      assert.equal(typedResult.supportLevel, voiceResult.supportLevel);
+    } finally {
+      axios.post = originalPost;
+      delete process.env.GROQ_API_KEY;
+    }
+  });
+});

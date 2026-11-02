@@ -506,14 +506,40 @@ export async function renderAssistant(root, presetQ = '') {
     });
   }
 
+  // ── Composer lock — prevents sending while AI is responding ─────────────
+  let isResponding = false;
+  const sendBtn = root.querySelector('#send');
+  const micBtn = root.querySelector('#mic-btn');
+
+  function setComposerLocked(locked) {
+    isResponding = locked;
+    qInput.disabled = locked;
+    sendBtn.disabled = locked;
+    micBtn.disabled = locked;
+    sendBtn.setAttribute('aria-busy', String(locked));
+    micBtn.setAttribute('aria-disabled', String(locked));
+    if (locked) {
+      sendBtn.title = 'Please wait for the AI to finish responding';
+      micBtn.title = 'Please wait for the AI to finish responding';
+      qInput.placeholder = 'Waiting for response…';
+    } else {
+      sendBtn.title = '';
+      micBtn.title = 'Hold to record — release to send';
+      qInput.placeholder = 'Ask a grounded question…';
+    }
+  }
+
   async function ask(question) {
     if (!question.trim()) return;
+    if (isResponding) return;
+    setComposerLocked(true);
     addBubble('user', question);
     qInput.value = '';
     const loading = document.createElement('div');
-    loading.className = 'bubble assistant';
-    loading.innerHTML = '<div class="skeleton" style="width:12rem"></div>';
+    loading.className = 'bubble assistant loading-bubble';
+    loading.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
     thread.appendChild(loading);
+    thread.scrollTop = thread.scrollHeight;
     try {
       const res = await api.ask(question, state.conversationId);
       const isNewConversation = !state.conversationId || state.conversationId !== res.conversationId;
@@ -549,10 +575,12 @@ export async function renderAssistant(root, presetQ = '') {
       loading.remove();
       addBubble('assistant', `Error: ${err.message}`);
       toast(err.message, true);
+    } finally {
+      setComposerLocked(false);
     }
   }
 
-  root.querySelector('#send').addEventListener('click', () => ask(qInput.value));
+  sendBtn.addEventListener('click', () => ask(qInput.value));
   qInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -565,7 +593,6 @@ export async function renderAssistant(root, presetQ = '') {
   if (presetQ) ask(presetQ);
 
   // ── Voice push-to-talk ────────────────────────────────────────────────────
-  const micBtn = root.querySelector('#mic-btn');
   const voiceStatus = root.querySelector('#voice-status');
   const voicePlayback = root.querySelector('#voice-playback');
   const replayBtn = root.querySelector('#replay-btn');
@@ -695,20 +722,8 @@ export async function renderAssistant(root, presetQ = '') {
       currentSource.start();
       currentSource.onended = () => { currentSource = null; setVoiceStatus(''); };
       setVoiceStatus('🔊 Speaking…');
-    } else if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const bubbles = thread.querySelectorAll('.bubble.assistant');
-      const last = bubbles[bubbles.length - 1];
-      if (last) {
-        const utt = new SpeechSynthesisUtterance(last.textContent || '');
-        utt.lang = 'en';
-        utt.rate = 0.95;
-        utt.onstart = () => setVoiceStatus('🔊 Speaking…');
-        utt.onend = () => setVoiceStatus('');
-        setTimeout(() => window.speechSynthesis.speak(utt), 80);
-        setVoiceStatus('🔊 Speaking…');
-      }
     }
+    // No browser-speech fallback — Piper only
   });
 
   stopBtn.addEventListener('click', () => {
@@ -795,38 +810,50 @@ export async function renderAssistant(root, presetQ = '') {
 
   async function startRecording() {
     if (mediaRecorder) return; // already recording
-    // Create / resume AudioContext inside the gesture handler so Chrome
-    // never treats it as suspended when we play back the answer later.
+    if (isResponding) return;  // blocked while AI is responding
     ensureAudioContext();
+
+    // Guard against the race where the user releases the button before
+    // getUserMedia resolves.
+    let cancelledBeforeStart = false;
+    mediaRecorder = { _pending: true, _stop: () => { cancelledBeforeStart = true; } };
+
     try {
-      // Request mono 16 kHz directly — avoids MediaRecorder → webm → decode
-      // pipeline which can corrupt samples on some Chromium builds.
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, sampleRate: 16000, echoCancellation: true, noiseSuppression: true },
         video: false,
       });
+
+      if (cancelledBeforeStart) {
+        stream.getTracks().forEach((t) => t.stop());
+        mediaRecorder = null;
+        setVoiceStatus('');
+        return;
+      }
+
       setVoiceStatus('● Recording… release to send', false);
       micBtn.setAttribute('aria-pressed', 'true');
       micBtn.classList.add('recording');
 
-      // Capture raw Float32 PCM via ScriptProcessorNode (universally supported)
+      // Use AudioWorklet (replaces deprecated ScriptProcessorNode)
       const captureCtx = new AudioContext({ sampleRate: 16000 });
+      if (captureCtx.state === 'suspended') await captureCtx.resume();
+
+      // Load the worklet module (served as a static file)
+      await captureCtx.audioWorklet.addModule('js/pcm-processor.js');
+
       const source = captureCtx.createMediaStreamSource(stream);
-      const bufSize = 4096;
-      const processor = captureCtx.createScriptProcessor(bufSize, 1, 1);
+      const workletNode = new AudioWorkletNode(captureCtx, 'pcm-capture');
       const pcmChunks = [];
-      processor.onaudioprocess = (e) => {
-        // Copy — the buffer is reused after this callback
-        pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-      };
-      source.connect(processor);
-      processor.connect(captureCtx.destination);
-      // Store refs so the stop handler can clean up
-      mediaRecorder = { _captureCtx: captureCtx, _processor: processor, _source: source, _stream: stream };
+      workletNode.port.onmessage = (e) => pcmChunks.push(e.data);
+      source.connect(workletNode);
+      workletNode.connect(captureCtx.destination);
+
+      mediaRecorder = { _captureCtx: captureCtx, _workletNode: workletNode, _source: source, _stream: stream };
 
       // Triggered when the user releases the mic button (see stopRecording below)
       mediaRecorder._stop = async () => {
-        processor.disconnect();
+        workletNode.disconnect();
         source.disconnect();
         captureCtx.close();
         stream.getTracks().forEach((t) => t.stop());
@@ -840,37 +867,90 @@ export async function renderAssistant(root, presetQ = '') {
         }
 
         setVoiceStatus('Processing…');
+        setComposerLocked(true);
+        let voiceLoading = null;
         try {
-          // Merge chunks and resample if the browser ignored our sampleRate hint
+          // Merge and resample to 16 kHz
           const totalLen = pcmChunks.reduce((s, c) => s + c.length, 0);
           const merged = new Float32Array(totalLen);
           let offset = 0;
           for (const chunk of pcmChunks) { merged.set(chunk, offset); offset += chunk.length; }
           const samples16k = await resampleTo16k(merged, captureCtx.sampleRate);
 
-          setVoiceStatus('Sending to server…');
-          const result = await api.voiceAsk(samples16k);
+          // ── Step 1: transcribe (Whisper, fast) ──────────────────────────
+          setVoiceStatus('Transcribing…');
+          const { question } = await api.voiceTranscribe(samples16k);
 
-          // Show question and answer in the thread
-          addBubble('user', `🎙️ ${result.question}`);
-          const bubble = addBubble('assistant', result.answer);
+          // User's question on the RIGHT immediately
+          const userBubble = document.createElement('div');
+          userBubble.className = 'bubble user';
+          userBubble.textContent = `🎙️ ${question}`;
+          thread.appendChild(userBubble);
+          thread.scrollTop = thread.scrollHeight;
 
-          // Persist the conversation id so follow-up typed questions
-          // can continue from the same conversation thread
-          if (result.conversationId) {
-            state.conversationId = result.conversationId;
-          }
+          // ── Step 2: RAG answer + TTS in one request ──────────────────────
+          // voice=true tells the server to run Piper in parallel with the
+          // RAG query and return audioBase64 in the same response — no extra
+          // round-trip, audio starts playing the moment the answer renders.
+          setVoiceStatus('Getting answer…');
+          voiceLoading = document.createElement('div');
+          voiceLoading.className = 'bubble assistant loading-bubble';
+          voiceLoading.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
+          thread.appendChild(voiceLoading);
+          thread.scrollTop = thread.scrollHeight;
 
-          setVoiceStatus(`Transcribed: "${result.question}"`);
+          const askRes = await api.ask(question, state.conversationId, null, true);
+          state.conversationId = askRes.conversationId;
 
-          // Refresh sidebar so the voice conversation appears immediately
+          // Start decoding audio and render bubble simultaneously —
+          // decodeAudioData runs in parallel with DOM work so audio is
+          // ready to play the instant the bubble is painted.
+          voiceLoading.remove();
+          voiceLoading = null;
+
+          // Kick off audio decode immediately (non-blocking)
+          const audioDecodePromise = askRes.audioBase64
+            ? (async () => {
+                try {
+                  const ctx = ensureAudioContext();
+                  if (ctx.state !== 'running') await ctx.resume();
+                  const binary = atob(askRes.audioBase64);
+                  const bytes = new Uint8Array(binary.length);
+                  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                  return await ctx.decodeAudioData(bytes.buffer.slice(0));
+                } catch { return null; }
+              })()
+            : Promise.resolve(null);
+
+          // Render bubble while audio is decoding
+          addBubble('assistant', askRes.answer);
           refreshSidebarHistory();
+          setVoiceStatus('');
 
-          // Play back the answer
-          await playAnswer(result.audioBase64, stripMarkdownForSpeech(result.answer));
+          // By now decodeAudioData has had the render cycle to run — await it
+          const decodedBuffer = await audioDecodePromise;
+
+          if (decodedBuffer) {
+            stopPlayback();
+            const ctx = ensureAudioContext();
+            lastAudio = decodedBuffer;
+            currentSource = ctx.createBufferSource();
+            currentSource.buffer = decodedBuffer;
+            currentSource.connect(ctx.destination);
+            currentSource.start();
+            currentSource.onended = () => { currentSource = null; setVoiceStatus(''); };
+            const repeatBtn2 = root.querySelector('#replay-btn');
+            const stopBtn2   = root.querySelector('#stop-btn');
+            if (repeatBtn2) repeatBtn2.style.display = '';
+            if (stopBtn2)   stopBtn2.style.display   = '';
+          }
+          // No else — if Piper returned nothing, stay silent (never use browser speech)
         } catch (err) {
+          if (voiceLoading) { voiceLoading.remove(); voiceLoading = null; }
           setVoiceStatus(err.message || 'Voice request failed', true);
           toast(err.message || 'Voice request failed', true);
+        } finally {
+          setComposerLocked(false);
         }
       };
     } catch (err) {

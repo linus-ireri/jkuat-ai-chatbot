@@ -13,6 +13,7 @@ import { Document } from '@langchain/core/documents';
 
 import { cleanLlmAnswer } from './lib/clean-llm-answer.js';
 import { createVeritasRouter } from './lib/veritas-rag/routes.js';
+import { warmUpPiper } from './lib/veritas-rag/voice.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -238,13 +239,14 @@ app.get('/', (req, res) => {
 app.use('/veritas-rag-ui', express.static(path.join(__dirname, 'public', 'veritas-rag')));
 
 loadRAG().then(() => {
-  // Whisper is loaded lazily on the first /voice/ask request — not at startup —
-  // so it doesn't consume ~150 MB of RAM until voice is actually used.
   app.listen(PORT, () => {
     console.log(`RAG server listening on port ${PORT}`);
     console.log(`VeritasRAG API: http://localhost:${PORT}/veritas-rag/meta`);
     console.log(`VeritasRAG UI:  http://localhost:${PORT}/veritas-rag-ui/`);
   });
+  // Warm up Piper in the background — model loads once so the first real
+  // voice request is instant instead of waiting ~3.5 s for ONNX to load.
+  warmUpPiper().catch(() => {});
 }).catch(err => {
   console.error('Failed to load RAG:', err);
   process.exit(1);

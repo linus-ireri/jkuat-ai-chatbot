@@ -105,10 +105,13 @@ export const api = {
       xhr.send(fd);
     });
   },
-  ask: (question, conversationId = null, documentIds = null) =>
+  ask: (question, conversationId = null, documentIds = null, voice = false) =>
     request('/ask', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(voice ? { 'X-Veritas-Voice': 'true' } : {}),
+      },
       body: JSON.stringify({ question, conversationId, documentIds }),
     }),
   conversations: () => request('/conversations'),
@@ -134,6 +137,44 @@ export const api = {
     }),
   cancelChange: (id) => request(`/jkuat/schedule-changes/${id}/cancel`, { method: 'POST' }),
   freshness: () => request('/admin/freshness'),
+
+  /**
+   * Step 3 of voice flow: get TTS audio for a text string.
+   * @param {string} text
+   * @returns {Promise<{audioBase64: string|null}>}
+   */
+  voiceTts(text) {
+    return request('/voice/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+  },
+
+  /**
+   * Step 1 of two-step voice flow: send PCM, get back the transcribed question only.
+   * Fast — Whisper only, no RAG.
+   * @param {Float32Array} samples  16 kHz mono Float32 PCM
+   * @returns {Promise<{question: string}>}
+   */
+  voiceTranscribe(samples) {
+    const url = `${getApiBase()}/voice/transcribe`;
+    const buffer = samples.buffer.slice(samples.byteOffset, samples.byteOffset + samples.byteLength);
+    return fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { ...headers({ 'Content-Type': 'application/octet-stream' }) },
+      body: buffer,
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(data.error || res.statusText || 'Transcription failed');
+        err.status = res.status;
+        throw err;
+      }
+      return data;
+    });
+  },
 
   /**
    * Send raw Float32 PCM audio (16 kHz mono) to the voice endpoint.
